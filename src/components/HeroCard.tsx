@@ -233,7 +233,7 @@ export default function HeroCard({
               }}
               className="inline-flex h-8 items-center gap-1 rounded-full bg-white px-3 text-[12px] font-medium text-ink-secondary transition hover:bg-surface"
             >
-              <Plus size={14} /> Новый месяц
+              <Plus size={14} /> Создать план на месяц
             </button>
             <button
               type="button"
@@ -310,20 +310,28 @@ export default function HeroCard({
       </div>
 
       {addingMonth && (
-        <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_170px_150px_auto]">
-          <label className="grid gap-1 text-[12px] text-ink-muted">
-            Плановая сумма, $
-            <input inputMode="decimal" value={newMonthTarget} onChange={(e) => setNewMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
-          </label>
-          <label className="grid gap-1 text-[12px] text-ink-muted">
-            Месяц начинается
-            <input type="date" value={newMonthStartDate} onChange={(e) => setNewMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
-          </label>
-          <label className="grid gap-1 text-[12px] text-ink-muted">
-            Старт месяца
-            <input type="number" min="1" max="28" value={newMonthStartDay} onChange={(e) => setNewMonthStartDay(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
-          </label>
-          <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Создать месяц</button>
+        <div className="mt-5 rounded-2xl bg-white p-4">
+          <div className="mb-4">
+            <p className="text-[15px] font-semibold text-ink">Новый план продаж</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+              Создайте отдельный месяц. Старые месяцы останутся в истории, а новые поступления будут добавляться только сюда.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_170px_150px_auto]">
+            <label className="grid gap-1 text-[12px] text-ink-muted">
+              Цель на этот месяц, $
+              <input inputMode="decimal" value={newMonthTarget} onChange={(e) => setNewMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            </label>
+            <label className="grid gap-1 text-[12px] text-ink-muted">
+              Дата начала плана
+              <input type="date" value={newMonthStartDate} onChange={(e) => setNewMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            </label>
+            <label className="grid gap-1 text-[12px] text-ink-muted">
+              День старта
+              <input type="number" min="1" max="28" value={newMonthStartDay} onChange={(e) => setNewMonthStartDay(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            </label>
+            <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Создать план</button>
+          </div>
         </div>
       )}
 
