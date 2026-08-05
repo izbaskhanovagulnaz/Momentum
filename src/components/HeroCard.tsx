@@ -8,6 +8,7 @@ interface HeroCardProps {
   onAddMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   onSelectMonth: (monthId: string) => void;
   onDeleteMonth: (monthId: string) => void;
+  onUpdateMonth: (monthId: string, targetAmount: number, startDate: string, endDate: string) => void;
   onUpdateTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   onAddEntry: (source: string, amount: number, date: string) => void;
   onUpdateEntry: (id: string, source: string, amount: number, date: string) => void;
@@ -86,6 +87,7 @@ export default function HeroCard({
   onAddMonth,
   onSelectMonth,
   onDeleteMonth,
+  onUpdateMonth,
   onUpdateTarget,
   onAddEntry,
   onUpdateEntry,
@@ -95,6 +97,7 @@ export default function HeroCard({
   const [showEntries, setShowEntries] = useState(false);
   const [editingTarget, setEditingTarget] = useState(false);
   const [addingMonth, setAddingMonth] = useState(false);
+  const [editingMonthId, setEditingMonthId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [source, setSource] = useState("");
   const [amount, setAmount] = useState("");
@@ -105,6 +108,9 @@ export default function HeroCard({
   const [newMonthTarget, setNewMonthTarget] = useState(String(salesPlan.targetAmount));
   const [newMonthStartDate, setNewMonthStartDate] = useState(localDate());
   const [newMonthEndDate, setNewMonthEndDate] = useState(salesPeriodFor(localDate(), 1).end);
+  const [editMonthTarget, setEditMonthTarget] = useState("");
+  const [editMonthStartDate, setEditMonthStartDate] = useState("");
+  const [editMonthEndDate, setEditMonthEndDate] = useState("");
   const [editSource, setEditSource] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState(localDate());
@@ -177,6 +183,25 @@ export default function HeroCard({
     setShowEntries(false);
   };
 
+  const beginMonthEdit = (monthId: string) => {
+    const month = salesPlan.months.find((item) => item.id === monthId);
+    if (!month) return;
+    setEditingMonthId(month.id);
+    setEditMonthTarget(String(month.targetAmount));
+    setEditMonthStartDate(month.startDate);
+    setEditMonthEndDate(month.deadline);
+    setAddingMonth(false);
+    setEditingTarget(false);
+  };
+
+  const saveMonthEdit = () => {
+    if (!editingMonthId) return;
+    const numericTarget = Number(editMonthTarget.replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(numericTarget) || numericTarget <= 0 || !editMonthStartDate || !editMonthEndDate || editMonthEndDate < editMonthStartDate) return;
+    onUpdateMonth(editingMonthId, numericTarget, editMonthStartDate, editMonthEndDate);
+    setEditingMonthId(null);
+  };
+
   const submitEntry = () => {
     const numericAmount = Number(amount.replace(/\s/g, "").replace(",", "."));
     if (!source.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0 || !entryDate) return;
@@ -228,6 +253,7 @@ export default function HeroCard({
                 onSelectMonth(event.target.value);
                 setEditingTarget(false);
                 setAddingMonth(false);
+                setEditingMonthId(null);
                 setShowEntries(false);
               }}
               className="h-8 rounded-full border border-line bg-white px-3 text-[12px] font-medium text-ink-secondary outline-none"
@@ -247,6 +273,7 @@ export default function HeroCard({
                 setNewMonthEndDate(salesPeriodFor(localDate(), 1).end);
                 setAddingMonth((value) => !value);
                 setEditingTarget(false);
+                setEditingMonthId(null);
               }}
               className="inline-flex h-8 items-center gap-1 rounded-full bg-white px-3 text-[12px] font-medium text-ink-secondary transition hover:bg-surface"
             >
@@ -260,6 +287,7 @@ export default function HeroCard({
                 setMonthStartDay(String(salesPlan.monthStartDay || 1));
                 setEditingTarget((value) => !value);
                 setAddingMonth(false);
+                setEditingMonthId(null);
               }}
               className="rounded-lg p-1 text-ink-muted transition hover:bg-white hover:text-ink"
               aria-label="Редактировать план продаж"
@@ -384,11 +412,46 @@ export default function HeroCard({
                     <Trash2 size={15} />
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => beginMonthEdit(month.id)}
+                  className="rounded-lg p-2 text-ink-muted transition hover:bg-white hover:text-primary"
+                  aria-label="Редактировать месяц"
+                >
+                  <Pencil size={15} />
+                </button>
               </div>
             );
           })}
         </div>
       </div>
+
+      {editingMonthId && (
+        <div className="mt-5 rounded-2xl bg-white p-4">
+          <div className="mb-4">
+            <p className="text-[15px] font-semibold text-ink">Редактировать месяц</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">Измените цель или промежуток и нажмите Сохранить.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_170px_170px_auto]">
+            <label className="grid gap-1 text-[12px] text-ink-muted">
+              Цель на этот месяц, $
+              <input inputMode="decimal" value={editMonthTarget} onChange={(e) => setEditMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            </label>
+            <label className="grid gap-1 text-[12px] text-ink-muted">
+              Начало периода
+              <input type="date" value={editMonthStartDate} onChange={(e) => setEditMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            </label>
+            <label className="grid gap-1 text-[12px] text-ink-muted">
+              Конец периода
+              <input type="date" value={editMonthEndDate} onChange={(e) => setEditMonthEndDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            </label>
+            <div className="flex gap-2 self-end">
+              <button type="button" onClick={saveMonthEdit} className="rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить</button>
+              <button type="button" onClick={() => setEditingMonthId(null)} className="rounded-xl bg-surface-subtle px-4 py-3 text-[13px] font-medium text-ink-secondary">Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingTarget && (
         <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_180px_auto]">

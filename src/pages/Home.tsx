@@ -26,6 +26,7 @@ export default function Home() {
     addSalesMonth,
     selectSalesMonth,
     deleteSalesMonth,
+    updateSalesMonth,
     updateSalesTarget,
     addSaleEntry,
     updateSaleEntry,
@@ -76,6 +77,7 @@ export default function Home() {
         onAddMonth={addSalesMonth}
         onSelectMonth={selectSalesMonth}
         onDeleteMonth={deleteSalesMonth}
+        onUpdateMonth={updateSalesMonth}
         onUpdateTarget={updateSalesTarget}
         onAddEntry={addSaleEntry}
         onUpdateEntry={updateSaleEntry}

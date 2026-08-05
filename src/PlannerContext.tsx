@@ -31,6 +31,7 @@ interface PlannerContextValue {
   addSalesMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   selectSalesMonth: (monthId: string) => void;
   deleteSalesMonth: (monthId: string) => void;
+  updateSalesMonth: (monthId: string, targetAmount: number, startDate: string, endDate: string) => void;
   updateSalesTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   addSaleEntry: (source: string, amount: number, date: string) => void;
   updateSaleEntry: (id: string, source: string, amount: number, date: string) => void;
@@ -455,6 +456,29 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         ...salesPlanRef.current,
         activeMonthId: nextActiveMonthId,
         months: remainingMonths,
+      });
+      applySalesPlan(next);
+      void persist(tasksRef.current, notesRef.current, next);
+    },
+
+    updateSalesMonth: (monthId, targetAmount, startDate, endDate) => {
+      if (!startDate || !endDate || endDate < startDate || targetAmount <= 0) return;
+      const nextMonths = salesPlanRef.current.months.map((month) =>
+        month.id === monthId
+          ? {
+              ...month,
+              label: monthLabel(startDate, endDate),
+              startDate,
+              targetAmount: Math.max(0, targetAmount),
+              deadline: endDate,
+              monthStartDay: clampMonthStartDay(new Date(`${startDate}T12:00:00`).getDate()),
+            }
+          : month,
+      );
+      const next = normalizeSalesPlan({
+        ...salesPlanRef.current,
+        activeMonthId: monthId,
+        months: nextMonths,
       });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);
