@@ -90,6 +90,7 @@ export interface SaleEntry {
 export interface SalesMonthPlan {
   id: string;
   label: string;
+  startDate: string;
   targetAmount: number;
   deadline: string;
   monthStartDay: number;
@@ -99,6 +100,7 @@ export interface SalesMonthPlan {
 export interface SalesPlan {
   activeMonthId: string;
   months: SalesMonthPlan[];
+  startDate: string;
   targetAmount: number;
   deadline: string;
   monthStartDay: number;

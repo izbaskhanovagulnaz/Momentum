@@ -28,7 +28,7 @@ interface PlannerContextValue {
   updateTask: (id: string, input: Partial<Omit<Task, "id">>) => void;
   addNote: (text: string) => void;
   deleteNote: (id: string) => void;
-  addSalesMonth: (targetAmount: number, startDate: string, monthStartDay?: number) => void;
+  addSalesMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   selectSalesMonth: (monthId: string) => void;
   updateSalesTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   addSaleEntry: (source: string, amount: number, date: string) => void;
@@ -96,6 +96,7 @@ const initialSalesPlan: SalesPlan = {
   months: [{
     id: "sales-month-current",
     label: new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(new Date(`${today}T12:00:00`)),
+    startDate: today,
     targetAmount: 25_000,
     deadline: today,
     monthStartDay: 1,
@@ -103,6 +104,7 @@ const initialSalesPlan: SalesPlan = {
       { id: "sale-1", source: "Основные продажи", amount: 16_800, date: today },
     ],
   }],
+  startDate: today,
   targetAmount: 25_000,
   deadline: today,
   monthStartDay: 1,
@@ -178,11 +180,12 @@ function monthLabel(startDate: string, endDate: string) {
 function normalizeSalesMonth(raw: Partial<SalesMonthPlan> & Record<string, unknown>, fallbackId: string): SalesMonthPlan {
   const monthStartDay = clampMonthStartDay(raw.monthStartDay);
   const deadline = typeof raw.deadline === "string" && raw.deadline ? raw.deadline : salesPeriodFor(today, monthStartDay).end;
-  const period = salesPeriodFor(deadline, monthStartDay);
+  const startDate = typeof raw.startDate === "string" && raw.startDate ? raw.startDate : salesPeriodFor(deadline, monthStartDay).start;
 
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : fallbackId,
-    label: typeof raw.label === "string" && raw.label ? raw.label : monthLabel(period.start, period.end),
+    label: typeof raw.label === "string" && raw.label ? raw.label : monthLabel(startDate, deadline),
+    startDate,
     targetAmount: Number(raw.targetAmount) || initialSalesPlan.targetAmount,
     deadline,
     monthStartDay,
@@ -195,6 +198,7 @@ function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): 
     id: "sales-month-current",
     targetAmount: raw.targetAmount,
     deadline: raw.deadline,
+    startDate: raw.startDate,
     monthStartDay: raw.monthStartDay,
     entries: raw.entries,
   }, "sales-month-current");
@@ -212,6 +216,7 @@ function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): 
   return {
     activeMonthId,
     months,
+    startDate: activeMonth.startDate,
     targetAmount: activeMonth.targetAmount,
     deadline: activeMonth.deadline,
     monthStartDay: activeMonth.monthStartDay,
@@ -411,15 +416,15 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       void persist(tasksRef.current, nextNotes, salesPlanRef.current);
     },
 
-    addSalesMonth: (targetAmount, startDate, monthStartDay) => {
-      const safeStartDay = clampMonthStartDay(monthStartDay);
-      const period = salesPeriodFor(startDate || today, safeStartDay);
+    addSalesMonth: (targetAmount, startDate, endDate) => {
+      if (!startDate || !endDate || endDate < startDate) return;
       const month: SalesMonthPlan = {
         id: crypto.randomUUID(),
-        label: monthLabel(period.start, period.end),
+        label: monthLabel(startDate, endDate),
+        startDate,
         targetAmount: Math.max(0, targetAmount),
-        deadline: period.end,
-        monthStartDay: safeStartDay,
+        deadline: endDate,
+        monthStartDay: clampMonthStartDay(new Date(`${startDate}T12:00:00`).getDate()),
         entries: [],
       };
       const next = normalizeSalesPlan({

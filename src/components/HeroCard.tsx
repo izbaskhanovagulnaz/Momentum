@@ -5,7 +5,7 @@ import type { SaleEntry, SalesPlan } from "../types";
 
 interface HeroCardProps {
   salesPlan: SalesPlan;
-  onAddMonth: (targetAmount: number, startDate: string, monthStartDay?: number) => void;
+  onAddMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   onSelectMonth: (monthId: string) => void;
   onUpdateTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   onAddEntry: (source: string, amount: number, date: string) => void;
@@ -102,14 +102,17 @@ export default function HeroCard({
   const [monthStartDay, setMonthStartDay] = useState(String(salesPlan.monthStartDay || 1));
   const [newMonthTarget, setNewMonthTarget] = useState(String(salesPlan.targetAmount));
   const [newMonthStartDate, setNewMonthStartDate] = useState(localDate());
-  const [newMonthStartDay, setNewMonthStartDay] = useState(String(salesPlan.monthStartDay || 1));
+  const [newMonthEndDate, setNewMonthEndDate] = useState(salesPeriodFor(localDate(), 1).end);
   const [editSource, setEditSource] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState(localDate());
 
   const currentPeriod = useMemo(
-    () => salesPeriodFor(localDate(), salesPlan.monthStartDay || 1),
-    [salesPlan.monthStartDay],
+    () => ({
+      start: salesPlan.startDate || salesPeriodFor(localDate(), salesPlan.monthStartDay || 1).start,
+      end: salesPlan.deadline,
+    }),
+    [salesPlan.startDate, salesPlan.deadline, salesPlan.monthStartDay],
   );
 
   const normalizedEntries = useMemo(
@@ -152,9 +155,8 @@ export default function HeroCard({
 
   const createMonth = () => {
     const numericTarget = Number(newMonthTarget.replace(/\s/g, "").replace(",", "."));
-    const numericMonthStartDay = clampMonthStartDay(Number(newMonthStartDay));
-    if (!Number.isFinite(numericTarget) || numericTarget <= 0 || !newMonthStartDate) return;
-    onAddMonth(numericTarget, newMonthStartDate, numericMonthStartDay);
+    if (!Number.isFinite(numericTarget) || numericTarget <= 0 || !newMonthStartDate || !newMonthEndDate || newMonthEndDate < newMonthStartDate) return;
+    onAddMonth(numericTarget, newMonthStartDate, newMonthEndDate);
     setAddingMonth(false);
     setEditingTarget(false);
     setShowEntries(false);
@@ -227,7 +229,7 @@ export default function HeroCard({
               onClick={() => {
                 setNewMonthTarget(String(salesPlan.targetAmount));
                 setNewMonthStartDate(localDate());
-                setNewMonthStartDay(String(salesPlan.monthStartDay || 1));
+                setNewMonthEndDate(salesPeriodFor(localDate(), 1).end);
                 setAddingMonth((value) => !value);
                 setEditingTarget(false);
               }}
@@ -313,22 +315,20 @@ export default function HeroCard({
         <div className="mt-5 rounded-2xl bg-white p-4">
           <div className="mb-4">
             <p className="text-[15px] font-semibold text-ink">Новый план продаж</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
-              Создайте отдельный месяц. Старые месяцы останутся в истории, а новые поступления будут добавляться только сюда.
-            </p>
+            <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">Выберите промежуток и цель. Старые месяцы останутся отдельно.</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_170px_150px_auto]">
+          <div className="grid gap-3 md:grid-cols-[1fr_170px_170px_auto]">
             <label className="grid gap-1 text-[12px] text-ink-muted">
               Цель на этот месяц, $
               <input inputMode="decimal" value={newMonthTarget} onChange={(e) => setNewMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
             </label>
             <label className="grid gap-1 text-[12px] text-ink-muted">
-              Дата начала плана
+              Начало периода
               <input type="date" value={newMonthStartDate} onChange={(e) => setNewMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
             </label>
             <label className="grid gap-1 text-[12px] text-ink-muted">
-              День старта
-              <input type="number" min="1" max="28" value={newMonthStartDay} onChange={(e) => setNewMonthStartDay(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              Конец периода
+              <input type="date" value={newMonthEndDate} onChange={(e) => setNewMonthEndDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
             </label>
             <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Создать план</button>
           </div>
