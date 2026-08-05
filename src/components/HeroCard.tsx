@@ -33,6 +33,13 @@ function dateValue(date: Date) {
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
 }
 
+function parseEntryDate(rawDate: string) {
+  if (!rawDate) return "";
+  const match = rawDate.match(/^\d{4}-\d{2}-\d{2}/);
+  if (!match) return "";
+  return match[0];
+}
+
 function clampMonthStartDay(value: number) {
   return Math.min(28, Math.max(1, Math.round(value)));
 }
@@ -97,9 +104,25 @@ export default function HeroCard({
     [salesPlan.monthStartDay],
   );
 
+  const normalizedEntries = useMemo(
+    () => salesPlan.entries.map((entry) => ({
+      ...entry,
+      normalizedDate: parseEntryDate(entry.date),
+    })),
+    [salesPlan.entries],
+  );
+
   const currentEntries = useMemo(
-    () => salesPlan.entries.filter((entry) => entry.date >= currentPeriod.start && entry.date <= currentPeriod.end),
-    [salesPlan.entries, currentPeriod],
+    () => normalizedEntries.filter((entry) => {
+      if (!entry.normalizedDate) return false;
+      return entry.normalizedDate >= currentPeriod.start && entry.normalizedDate <= currentPeriod.end;
+    }),
+    [normalizedEntries, currentPeriod],
+  );
+
+  const invalidDateCount = useMemo(
+    () => normalizedEntries.filter((entry) => !entry.normalizedDate).length,
+    [normalizedEntries],
   );
 
   const entriesByDate = useMemo(
@@ -206,6 +229,11 @@ export default function HeroCard({
               {showEntries ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
             </button>
           </div>
+          {invalidDateCount > 0 && (
+            <p className="mt-2 text-[12px] text-warning">
+              Есть {invalidDateCount} записей с некорректной датой в плане продаж. Проверьте формат: YYYY-MM-DD.
+            </p>
+          )}
         </div>
 
         <div className="relative shrink-0">
@@ -265,7 +293,7 @@ export default function HeroCard({
         <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_170px_auto]">
           <label className="grid gap-1 text-[12px] text-ink-muted">
             Откуда поступила сумма
-            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Например: Нурали — VIP тариф" className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Например: Нурали - VIP тариф" className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
           </label>
           <label className="grid gap-1 text-[12px] text-ink-muted">
             Сумма, $
@@ -283,7 +311,7 @@ export default function HeroCard({
         <div className="mt-5 overflow-hidden rounded-2xl bg-white">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <p className="text-[12px] font-medium text-ink-secondary">История поступлений</p>
-            <span className="text-[11px] text-ink-muted">По дате — сначала новые</span>
+            <span className="text-[11px] text-ink-muted">По дате - сначала новые</span>
           </div>
           <div className="divide-y divide-line px-4">
             {entriesByDate.length === 0 && <p className="py-5 text-center text-[13px] text-ink-muted">Поступлений пока нет</p>}
@@ -295,7 +323,7 @@ export default function HeroCard({
                     <div className="flex items-center gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[14px] font-medium text-ink">{entry.source}</p>
-                        <p className="mt-0.5 text-[11px] text-ink-muted">{formatDate(entry.date)}</p>
+                        <p className="mt-0.5 text-[11px] text-ink-muted">{formatDate(entry.normalizedDate)}</p>
                       </div>
                       <strong className="text-[14px] text-success">+{money(entry.amount)}</strong>
                       <button type="button" onClick={() => beginEdit(entry)} className="rounded-lg p-2 text-ink-muted hover:bg-surface-subtle hover:text-primary" aria-label="Редактировать поступление"><Pencil size={15} /></button>
@@ -321,3 +349,4 @@ export default function HeroCard({
     </motion.div>
   );
 }
+
