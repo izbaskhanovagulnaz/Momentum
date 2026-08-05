@@ -30,6 +30,7 @@ interface PlannerContextValue {
   deleteNote: (id: string) => void;
   addSalesMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   selectSalesMonth: (monthId: string) => void;
+  deleteSalesMonth: (monthId: string) => void;
   updateSalesTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   addSaleEntry: (source: string, amount: number, date: string) => void;
   updateSaleEntry: (id: string, source: string, amount: number, date: string) => void;
@@ -440,6 +441,20 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       const next = normalizeSalesPlan({
         ...salesPlanRef.current,
         activeMonthId: monthId,
+      });
+      applySalesPlan(next);
+    },
+
+    deleteSalesMonth: (monthId) => {
+      const remainingMonths = salesPlanRef.current.months.filter((month) => month.id !== monthId);
+      if (remainingMonths.length === 0) return;
+      const nextActiveMonthId = salesPlanRef.current.activeMonthId === monthId
+        ? remainingMonths[0].id
+        : salesPlanRef.current.activeMonthId;
+      const next = normalizeSalesPlan({
+        ...salesPlanRef.current,
+        activeMonthId: nextActiveMonthId,
+        months: remainingMonths,
       });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);

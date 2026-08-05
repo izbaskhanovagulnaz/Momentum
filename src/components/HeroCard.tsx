@@ -7,6 +7,7 @@ interface HeroCardProps {
   salesPlan: SalesPlan;
   onAddMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   onSelectMonth: (monthId: string) => void;
+  onDeleteMonth: (monthId: string) => void;
   onUpdateTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   onAddEntry: (source: string, amount: number, date: string) => void;
   onUpdateEntry: (id: string, source: string, amount: number, date: string) => void;
@@ -84,6 +85,7 @@ export default function HeroCard({
   salesPlan,
   onAddMonth,
   onSelectMonth,
+  onDeleteMonth,
   onUpdateTarget,
   onAddEntry,
   onUpdateEntry,
@@ -148,6 +150,19 @@ export default function HeroCard({
   const achieved = useMemo(
     () => currentEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
     [currentEntries],
+  );
+  const monthSummaries = useMemo(
+    () => salesPlan.months.map((month) => {
+      const total = month.entries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+      const monthProgress = month.targetAmount > 0 ? Math.min(100, Math.round((total / month.targetAmount) * 100)) : 0;
+
+      return {
+        ...month,
+        total,
+        progress: monthProgress,
+      };
+    }),
+    [salesPlan.months],
   );
   const remaining = Math.max(0, salesPlan.targetAmount - achieved);
   const progress = salesPlan.targetAmount > 0 ? Math.min(1, achieved / salesPlan.targetAmount) : 0;
@@ -256,11 +271,11 @@ export default function HeroCard({
           <h2 className="text-[22px] font-semibold leading-snug text-ink md:text-[26px]">
             {remaining > 0 ? `Осталось ${money(remaining)} до цели` : "План продаж выполнен"}
           </h2>
-          <p className="mt-2 text-[14px] leading-relaxed text-ink-secondary">
-            Выполнено {money(achieved)} из {money(salesPlan.targetAmount)} · дедлайн {formatDate(salesPlan.deadline)}
-          </p>
           <p className="mt-1 text-[12px] text-ink-muted">
-            Период: {formatShortDate(currentPeriod.start)} - {formatShortDate(currentPeriod.end)} · месяц начинается {salesPlan.monthStartDay || 1}-го числа
+            Период: {formatShortDate(currentPeriod.start)} - {formatShortDate(currentPeriod.end)}
+          </p>
+          <p className="mt-2 text-[14px] leading-relaxed text-ink-secondary">
+            Выполнено {money(achieved)} из {money(salesPlan.targetAmount)}
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
@@ -330,10 +345,50 @@ export default function HeroCard({
               Конец периода
               <input type="date" value={newMonthEndDate} onChange={(e) => setNewMonthEndDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
             </label>
-            <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Создать план</button>
+            <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить план</button>
           </div>
         </div>
       )}
+
+      <div className="mt-5 rounded-2xl bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-[13px] font-semibold text-ink">История месяцев</p>
+          <span className="text-[11px] text-ink-muted">{monthSummaries.length} периодов</span>
+        </div>
+        <div className="grid gap-2">
+          {monthSummaries.map((month) => {
+            const selected = month.id === salesPlan.activeMonthId;
+            return (
+              <div key={month.id} className={`flex flex-wrap items-center gap-3 rounded-2xl border px-3 py-3 ${selected ? "border-primary bg-primary/5" : "border-line bg-surface-subtle"}`}>
+                <button
+                  type="button"
+                  onClick={() => onSelectMonth(month.id)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <p className="truncate text-[13px] font-medium text-ink">{month.label}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-muted">
+                    {formatShortDate(month.startDate)} - {formatShortDate(month.deadline)}
+                  </p>
+                </button>
+                <div className="text-right">
+                  <p className="text-[13px] font-semibold text-ink">{money(month.total)} / {money(month.targetAmount)}</p>
+                  <p className="text-[11px] text-ink-muted">{month.progress}%</p>
+                </div>
+                {salesPlan.months.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteMonth(month.id)}
+                    className="rounded-lg p-2 text-ink-muted transition hover:bg-white hover:text-danger"
+                    aria-label="Удалить месяц"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {editingTarget && (
         <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_180px_auto]">
