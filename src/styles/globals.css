@@ -1,0 +1,43 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-ink font-sans antialiased;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+
+@layer components {
+  .card-surface {
+    @apply border border-line-strong shadow-sm;
+  }
+}
+
+@media (min-width: 768px) {
+  .rounded-3xl.bg-surface-subtle,
+  .rounded-3xl.bg-white,
+  .rounded-3xl.bg-accent-soft {
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 1px 2px rgba(17, 17, 19, 0.04);
+  }
+}

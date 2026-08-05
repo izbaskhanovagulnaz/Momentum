@@ -1,0 +1,1 @@
+Fixed GoalCard TypeScript errors: progress is calculated from currentValue/targetValue and target display uses currentValue, targetValue and unit.
