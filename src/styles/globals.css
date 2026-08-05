@@ -101,4 +101,11 @@ body {
     border: 1px solid #e0e0e0;
     box-shadow: 0 1px 2px rgba(17, 17, 19, 0.04);
   }
+
+  :root[data-theme="dark"] .rounded-3xl.bg-surface-subtle,
+  :root[data-theme="dark"] .rounded-3xl.bg-white,
+  :root[data-theme="dark"] .rounded-3xl.bg-accent-soft {
+    border-color: #2a2f38;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
 }

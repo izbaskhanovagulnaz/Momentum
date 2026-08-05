@@ -1,11 +1,27 @@
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Moon, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 
 export default function AuthScreen() {
   const { loading, error, loginWithGoogle } = useAuth();
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("momentum-theme") === "dark");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    localStorage.setItem("momentum-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   return (
-    <main className="safe-top safe-bottom flex min-h-[100dvh] items-center justify-center bg-white px-5 py-8">
+    <main className="safe-top safe-bottom relative flex min-h-[100dvh] items-center justify-center bg-white px-5 py-8">
+      <button
+        type="button"
+        onClick={() => setDarkMode((value) => !value)}
+        className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-white text-ink transition hover:bg-surface-subtle"
+        aria-label={darkMode ? "Включить светлую тему" : "Включить тёмную тему"}
+      >
+        {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
+
       <section className="w-full max-w-sm rounded-[32px] border border-line bg-white p-7 text-center shadow-[0_24px_70px_rgba(20,20,20,0.08)] md:p-9">
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-ink text-xl font-semibold text-white">
           M
