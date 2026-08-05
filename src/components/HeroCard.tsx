@@ -5,7 +5,7 @@ import type { SaleEntry, SalesPlan } from "../types";
 
 interface HeroCardProps {
   salesPlan: SalesPlan;
-  onUpdateTarget: (targetAmount: number, deadline: string) => void;
+  onUpdateTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   onAddEntry: (source: string, amount: number, date: string) => void;
   onUpdateEntry: (id: string, source: string, amount: number, date: string) => void;
   onDeleteEntry: (id: string) => void;
@@ -28,11 +28,46 @@ function localDate() {
   return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
 }
 
+function dateValue(date: Date) {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
+
+function clampMonthStartDay(value: number) {
+  return Math.min(28, Math.max(1, Math.round(value)));
+}
+
+function salesPeriodFor(dateValueString: string, startDay: number) {
+  const anchor = new Date(`${dateValueString}T12:00:00`);
+  const safeStartDay = clampMonthStartDay(startDay || 1);
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), safeStartDay, 12);
+
+  if (anchor.getDate() < safeStartDay) {
+    start.setMonth(start.getMonth() - 1);
+  }
+
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  end.setDate(end.getDate() - 1);
+
+  return {
+    start: dateValue(start),
+    end: dateValue(end),
+  };
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "long",
     year: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatShortDate(value: string) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
   }).format(new Date(`${value}T12:00:00`));
 }
 
@@ -52,22 +87,33 @@ export default function HeroCard({
   const [entryDate, setEntryDate] = useState(localDate());
   const [target, setTarget] = useState(String(salesPlan.targetAmount));
   const [deadline, setDeadline] = useState(salesPlan.deadline);
+  const [monthStartDay, setMonthStartDay] = useState(String(salesPlan.monthStartDay || 1));
   const [editSource, setEditSource] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState(localDate());
 
+  const currentPeriod = useMemo(
+    () => salesPeriodFor(localDate(), salesPlan.monthStartDay || 1),
+    [salesPlan.monthStartDay],
+  );
+
+  const currentEntries = useMemo(
+    () => salesPlan.entries.filter((entry) => entry.date >= currentPeriod.start && entry.date <= currentPeriod.end),
+    [salesPlan.entries, currentPeriod],
+  );
+
   const entriesByDate = useMemo(
-    () => [...salesPlan.entries].sort((a, b) => {
+    () => [...currentEntries].sort((a, b) => {
       const byDate = b.date.localeCompare(a.date);
       if (byDate !== 0) return byDate;
       return a.source.localeCompare(b.source, "ru");
     }),
-    [salesPlan.entries],
+    [currentEntries],
   );
 
   const achieved = useMemo(
-    () => salesPlan.entries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
-    [salesPlan.entries],
+    () => currentEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+    [currentEntries],
   );
   const remaining = Math.max(0, salesPlan.targetAmount - achieved);
   const progress = salesPlan.targetAmount > 0 ? Math.min(1, achieved / salesPlan.targetAmount) : 0;
@@ -86,8 +132,9 @@ export default function HeroCard({
 
   const saveTarget = () => {
     const numericTarget = Number(target.replace(/\s/g, "").replace(",", "."));
+    const numericMonthStartDay = clampMonthStartDay(Number(monthStartDay));
     if (!Number.isFinite(numericTarget) || numericTarget <= 0 || !deadline) return;
-    onUpdateTarget(numericTarget, deadline);
+    onUpdateTarget(numericTarget, deadline, numericMonthStartDay);
     setEditingTarget(false);
   };
 
@@ -122,6 +169,7 @@ export default function HeroCard({
               onClick={() => {
                 setTarget(String(salesPlan.targetAmount));
                 setDeadline(salesPlan.deadline);
+                setMonthStartDay(String(salesPlan.monthStartDay || 1));
                 setEditingTarget((value) => !value);
               }}
               className="rounded-lg p-1 text-ink-muted transition hover:bg-white hover:text-ink"
@@ -137,6 +185,9 @@ export default function HeroCard({
           <p className="mt-2 text-[14px] leading-relaxed text-ink-secondary">
             Выполнено {money(achieved)} из {money(salesPlan.targetAmount)} · дедлайн {formatDate(salesPlan.deadline)}
           </p>
+          <p className="mt-1 text-[12px] text-ink-muted">
+            Период: {formatShortDate(currentPeriod.start)} - {formatShortDate(currentPeriod.end)} · месяц начинается {salesPlan.monthStartDay || 1}-го числа
+          </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -151,7 +202,7 @@ export default function HeroCard({
               onClick={() => setShowEntries((value) => !value)}
               className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[13px] font-medium text-ink-secondary"
             >
-              История ({salesPlan.entries.length})
+              История ({currentEntries.length})
               {showEntries ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
             </button>
           </div>
@@ -182,10 +233,25 @@ export default function HeroCard({
       </div>
 
       {editingTarget && (
-        <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_180px_auto]">
+        <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_180px_auto]">
           <label className="grid gap-1 text-[12px] text-ink-muted">
             Плановая сумма, $
             <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+          </label>
+          <label className="grid gap-1 text-[12px] text-ink-muted">
+            Старт месяца
+            <input
+              type="number"
+              min="1"
+              max="28"
+              value={monthStartDay}
+              onChange={(e) => {
+                setMonthStartDay(e.target.value);
+                const nextStartDay = clampMonthStartDay(Number(e.target.value));
+                setDeadline(salesPeriodFor(localDate(), nextStartDay).end);
+              }}
+              className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none"
+            />
           </label>
           <label className="grid gap-1 text-[12px] text-ink-muted">
             Дедлайн

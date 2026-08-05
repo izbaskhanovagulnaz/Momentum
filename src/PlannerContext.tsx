@@ -27,7 +27,7 @@ interface PlannerContextValue {
   updateTask: (id: string, input: Partial<Omit<Task, "id">>) => void;
   addNote: (text: string) => void;
   deleteNote: (id: string) => void;
-  updateSalesTarget: (targetAmount: number, deadline: string) => void;
+  updateSalesTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   addSaleEntry: (source: string, amount: number, date: string) => void;
   updateSaleEntry: (id: string, source: string, amount: number, date: string) => void;
   deleteSaleEntry: (id: string) => void;
@@ -91,6 +91,7 @@ const initialNotes: NoteItem[] = [
 const initialSalesPlan: SalesPlan = {
   targetAmount: 25_000,
   deadline: today,
+  monthStartDay: 1,
   entries: [
     { id: "sale-1", source: "Основные продажи", amount: 16_800, date: today },
   ],
@@ -115,6 +116,21 @@ const initialGoals: Goal[] = [
     gallery: [],
   }),
 ];
+
+function clampMonthStartDay(value: unknown) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.min(28, Math.max(1, Math.round(numeric)));
+}
+
+function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): SalesPlan {
+  return {
+    targetAmount: Number(raw.targetAmount) || initialSalesPlan.targetAmount,
+    deadline: typeof raw.deadline === "string" && raw.deadline ? raw.deadline : today,
+    monthStartDay: clampMonthStartDay(raw.monthStartDay),
+    entries: Array.isArray(raw.entries) ? raw.entries : [],
+  };
+}
 
 const PlannerContext = createContext<PlannerContextValue | null>(null);
 
@@ -222,11 +238,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         applyTasks(normalizedTasks);
         applyNotes(Array.isArray(remote.notes) ? remote.notes : []);
         applySalesPlan(remote.salesPlan && typeof remote.salesPlan === "object"
-          ? {
-              targetAmount: Number(remote.salesPlan.targetAmount) || initialSalesPlan.targetAmount,
-              deadline: remote.salesPlan.deadline || today,
-              entries: Array.isArray(remote.salesPlan.entries) ? remote.salesPlan.entries : [],
-            }
+          ? normalizeSalesPlan(remote.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
           : initialSalesPlan);
         applyGoals(Array.isArray(remote.goals)
           ? remote.goals.map((goal) => normalizeGoal(
@@ -312,11 +324,12 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       void persist(tasksRef.current, nextNotes, salesPlanRef.current);
     },
 
-    updateSalesTarget: (targetAmount, deadline) => {
+    updateSalesTarget: (targetAmount, deadline, monthStartDay) => {
       const next = {
         ...salesPlanRef.current,
         targetAmount: Math.max(0, targetAmount),
         deadline,
+        monthStartDay: clampMonthStartDay(monthStartDay ?? salesPlanRef.current.monthStartDay),
       };
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);

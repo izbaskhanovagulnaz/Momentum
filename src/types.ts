@@ -90,5 +90,6 @@ export interface SaleEntry {
 export interface SalesPlan {
   targetAmount: number;
   deadline: string;
+  monthStartDay: number;
   entries: SaleEntry[];
 }
