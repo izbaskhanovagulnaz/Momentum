@@ -1,11 +1,17 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PropsWithChildren } from "react";
 import type {
+  Currency,
+  DebtItem,
+  FinanceExpense,
+  FinanceIncome,
+  FinanceState,
   Goal,
   GoalCreateInput,
   GoalPhoto,
   GoalProgressEntry,
   NoteItem,
+  PlannedExpense,
   SalesMonthPlan,
   SalesPlan,
   Task,
@@ -19,6 +25,7 @@ interface PlannerContextValue {
   tasks: Task[];
   notes: NoteItem[];
   salesPlan: SalesPlan;
+  finance: FinanceState;
   goals: Goal[];
   loading: boolean;
   syncStatus: "loading" | "saving" | "synced" | "error";
@@ -36,6 +43,17 @@ interface PlannerContextValue {
   addSaleEntry: (source: string, amount: number, date: string) => void;
   updateSaleEntry: (id: string, source: string, amount: number, date: string) => void;
   deleteSaleEntry: (id: string) => void;
+  addFinanceIncome: (input: Omit<FinanceIncome, "id" | "savingsAmount">) => void;
+  deleteFinanceIncome: (id: string) => void;
+  addFinanceExpense: (input: Omit<FinanceExpense, "id">) => void;
+  deleteFinanceExpense: (id: string) => void;
+  addPlannedExpense: (input: Omit<PlannedExpense, "id">) => void;
+  updatePlannedExpenseStatus: (id: string, status: PlannedExpense["status"]) => void;
+  deletePlannedExpense: (id: string) => void;
+  addDebt: (input: Omit<DebtItem, "id" | "status">) => void;
+  updateDebt: (id: string, paidAmount: number) => void;
+  deleteDebt: (id: string) => void;
+  updateExchangeRate: (currency: Currency, rate: number) => void;
   addGoal: (input: GoalCreateInput) => string;
   updateGoal: (
     id: string,
@@ -71,6 +89,7 @@ interface PlannerDocument {
   tasks: Task[];
   notes: NoteItem[];
   salesPlan: SalesPlan;
+  finance: FinanceState;
   goals: Goal[];
 }
 
@@ -113,6 +132,14 @@ const initialSalesPlan: SalesPlan = {
   entries: [
     { id: "sale-1", source: "Основные продажи", amount: 16_800, date: today },
   ],
+};
+
+const initialFinance: FinanceState = {
+  incomes: [],
+  expenses: [],
+  plannedExpenses: [],
+  debts: [],
+  rates: { USD: 1, UZS: 12_600, RUB: 92 },
 };
 
 const initialGoals: Goal[] = [
@@ -226,6 +253,21 @@ function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): 
   };
 }
 
+function normalizeFinance(raw: Partial<FinanceState> & Record<string, unknown>): FinanceState {
+  const rates = raw.rates && typeof raw.rates === "object" ? raw.rates as Partial<Record<Currency, number>> : {};
+  return {
+    incomes: Array.isArray(raw.incomes) ? raw.incomes : [],
+    expenses: Array.isArray(raw.expenses) ? raw.expenses : [],
+    plannedExpenses: Array.isArray(raw.plannedExpenses) ? raw.plannedExpenses : [],
+    debts: Array.isArray(raw.debts) ? raw.debts : [],
+    rates: {
+      USD: Number(rates.USD) || initialFinance.rates.USD,
+      UZS: Number(rates.UZS) || initialFinance.rates.UZS,
+      RUB: Number(rates.RUB) || initialFinance.rates.RUB,
+    },
+  };
+}
+
 const PlannerContext = createContext<PlannerContextValue | null>(null);
 
 export function PlannerProvider({ children }: PropsWithChildren) {
@@ -233,6 +275,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [salesPlan, setSalesPlan] = useState<SalesPlan>(initialSalesPlan);
+  const [finance, setFinance] = useState<FinanceState>(initialFinance);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<PlannerContextValue["syncStatus"]>("loading");
@@ -240,6 +283,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
   const tasksRef = useRef<Task[]>([]);
   const notesRef = useRef<NoteItem[]>([]);
   const salesPlanRef = useRef<SalesPlan>(initialSalesPlan);
+  const financeRef = useRef<FinanceState>(initialFinance);
   const goalsRef = useRef<Goal[]>([]);
   const plannerRef = useRef<FirebaseDocumentRef | null>(null);
   const pendingWritesRef = useRef(0);
@@ -259,6 +303,11 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     setSalesPlan(next);
   };
 
+  const applyFinance = (next: FinanceState) => {
+    financeRef.current = next;
+    setFinance(next);
+  };
+
   const applyGoals = (next: Goal[]) => {
     goalsRef.current = next;
     setGoals(next);
@@ -269,6 +318,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     nextNotes: NoteItem[],
     nextSalesPlan: SalesPlan,
     nextGoals = goalsRef.current,
+    nextFinance = financeRef.current,
   ) => {
     const ref = plannerRef.current;
     if (!ref) return;
@@ -281,6 +331,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         tasks: nextTasks,
         notes: nextNotes,
         salesPlan: nextSalesPlan,
+        finance: nextFinance,
         goals: nextGoals,
         updatedAt: serverTimestamp(),
       }, { merge: true });
@@ -303,6 +354,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       applyTasks([]);
       applyNotes([]);
       applySalesPlan(initialSalesPlan);
+      applyFinance(initialFinance);
       applyGoals([]);
       setLoading(false);
       return;
@@ -317,11 +369,13 @@ export function PlannerProvider({ children }: PropsWithChildren) {
           tasks: initialTasks,
           notes: initialNotes,
           salesPlan: initialSalesPlan,
+          finance: initialFinance,
           goals: initialGoals,
         };
         applyTasks(initial.tasks);
         applyNotes(initial.notes);
         applySalesPlan(initial.salesPlan);
+        applyFinance(initial.finance);
         applyGoals(initial.goals);
         await ref.set({ ...initial, updatedAt: serverTimestamp() });
       } else if (pendingWritesRef.current === 0) {
@@ -334,6 +388,9 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         applySalesPlan(remote.salesPlan && typeof remote.salesPlan === "object"
           ? normalizeSalesPlan(remote.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
           : initialSalesPlan);
+        applyFinance(remote.finance && typeof remote.finance === "object"
+          ? normalizeFinance(remote.finance as Partial<FinanceState> & Record<string, unknown>)
+          : initialFinance);
         applyGoals(Array.isArray(remote.goals)
           ? remote.goals.map((goal) => normalizeGoal(
               goal as unknown as Partial<Goal> & Record<string, unknown>,
@@ -360,6 +417,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     tasks,
     notes,
     salesPlan,
+    finance,
     goals,
     loading,
     syncStatus,
@@ -459,6 +517,123 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);
+    },
+
+    addFinanceIncome: (input) => {
+      const savingsAmount = Math.max(0, input.amount * (Number(input.savingsPercent || 0) / 100));
+      const nextFinance = {
+        ...financeRef.current,
+        incomes: [{ id: crypto.randomUUID(), ...input, savingsAmount }, ...financeRef.current.incomes],
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    deleteFinanceIncome: (id) => {
+      const nextFinance = {
+        ...financeRef.current,
+        incomes: financeRef.current.incomes.filter((income) => income.id !== id),
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    addFinanceExpense: (input) => {
+      const nextFinance = {
+        ...financeRef.current,
+        expenses: [{ id: crypto.randomUUID(), ...input }, ...financeRef.current.expenses],
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    deleteFinanceExpense: (id) => {
+      const nextFinance = {
+        ...financeRef.current,
+        expenses: financeRef.current.expenses.filter((expense) => expense.id !== id),
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    addPlannedExpense: (input) => {
+      const nextFinance = {
+        ...financeRef.current,
+        plannedExpenses: [{ id: crypto.randomUUID(), ...input }, ...financeRef.current.plannedExpenses],
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    updatePlannedExpenseStatus: (id, status) => {
+      const nextFinance = {
+        ...financeRef.current,
+        plannedExpenses: financeRef.current.plannedExpenses.map((expense) =>
+          expense.id === id ? { ...expense, status } : expense,
+        ),
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    deletePlannedExpense: (id) => {
+      const nextFinance = {
+        ...financeRef.current,
+        plannedExpenses: financeRef.current.plannedExpenses.filter((expense) => expense.id !== id),
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    addDebt: (input) => {
+      const paidAmount = Math.max(0, Math.min(input.amount, input.paidAmount || 0));
+      const nextFinance = {
+        ...financeRef.current,
+        debts: [{
+          id: crypto.randomUUID(),
+          ...input,
+          paidAmount,
+          status: paidAmount >= input.amount ? "closed" as const : paidAmount > 0 ? "partial" as const : "active" as const,
+        }, ...financeRef.current.debts],
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    updateDebt: (id, paidAmount) => {
+      const nextFinance = {
+        ...financeRef.current,
+        debts: financeRef.current.debts.map((debt) => {
+          if (debt.id !== id) return debt;
+          const nextPaid = Math.max(0, Math.min(debt.amount, paidAmount));
+          return {
+            ...debt,
+            paidAmount: nextPaid,
+            status: nextPaid >= debt.amount ? "closed" as const : nextPaid > 0 ? "partial" as const : "active" as const,
+          };
+        }),
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    deleteDebt: (id) => {
+      const nextFinance = {
+        ...financeRef.current,
+        debts: financeRef.current.debts.filter((debt) => debt.id !== id),
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+    },
+
+    updateExchangeRate: (currency, rate) => {
+      if (!Number.isFinite(rate) || rate <= 0) return;
+      const nextFinance = {
+        ...financeRef.current,
+        rates: { ...financeRef.current.rates, [currency]: rate },
+      };
+      applyFinance(nextFinance);
+      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
     },
 
     updateSalesMonth: (monthId, targetAmount, startDate, endDate) => {

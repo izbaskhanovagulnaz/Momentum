@@ -106,3 +106,55 @@ export interface SalesPlan {
   monthStartDay: number;
   entries: SaleEntry[];
 }
+
+export type Currency = "USD" | "UZS" | "RUB";
+
+export interface FinanceIncome {
+  id: string;
+  amount: number;
+  currency: Currency;
+  date: string;
+  source: string;
+  note: string;
+  savingsPercent: number;
+  savingsAmount: number;
+  fromSavingsAmount: number;
+}
+
+export interface FinanceExpense {
+  id: string;
+  amount: number;
+  currency: Currency;
+  date: string;
+  category: string;
+  note: string;
+}
+
+export interface PlannedExpense {
+  id: string;
+  title: string;
+  amount: number;
+  currency: Currency;
+  dueDate: string;
+  priority: "low" | "medium" | "high";
+  status: "planned" | "paid" | "cancelled";
+}
+
+export interface DebtItem {
+  id: string;
+  person: string;
+  amount: number;
+  paidAmount: number;
+  currency: Currency;
+  dueDate: string;
+  note: string;
+  status: "active" | "partial" | "closed";
+}
+
+export interface FinanceState {
+  incomes: FinanceIncome[];
+  expenses: FinanceExpense[];
+  plannedExpenses: PlannedExpense[];
+  debts: DebtItem[];
+  rates: Record<Currency, number>;
+}

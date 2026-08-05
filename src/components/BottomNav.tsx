@@ -1,12 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Home, Calendar, CheckSquare, Target, StickyNote } from "lucide-react";
+import { Home, Calendar, CheckSquare, Target, Wallet } from "lucide-react";
 
 const ITEMS = [
   { to: "/", label: "Главная", icon: Home, end: true },
   { to: "/calendar", label: "Календарь", icon: Calendar, end: false },
   { to: "/tasks", label: "Задачи", icon: CheckSquare, end: false },
   { to: "/goals", label: "Цели", icon: Target, end: false },
-  { to: "/notes", label: "Заметки", icon: StickyNote, end: false },
+  { to: "/finance", label: "Финансы", icon: Wallet, end: false },
 ];
 
 export default function BottomNav() {

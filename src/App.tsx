@@ -4,6 +4,7 @@ import Home from "./pages/Home";
 import CalendarPage from "./pages/Calendar";
 import Tasks from "./pages/Tasks";
 import Goals from "./pages/Goals";
+import Finance from "./pages/Finance";
 import Notes from "./pages/Notes";
 import Settings from "./pages/Settings";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/goals" element={<Goals />} />
+        <Route path="/finance" element={<Finance />} />
         <Route path="/notes" element={<Notes />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
