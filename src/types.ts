@@ -87,7 +87,18 @@ export interface SaleEntry {
   date: string;
 }
 
+export interface SalesMonthPlan {
+  id: string;
+  label: string;
+  targetAmount: number;
+  deadline: string;
+  monthStartDay: number;
+  entries: SaleEntry[];
+}
+
 export interface SalesPlan {
+  activeMonthId: string;
+  months: SalesMonthPlan[];
   targetAmount: number;
   deadline: string;
   monthStartDay: number;

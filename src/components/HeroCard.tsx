@@ -5,6 +5,8 @@ import type { SaleEntry, SalesPlan } from "../types";
 
 interface HeroCardProps {
   salesPlan: SalesPlan;
+  onAddMonth: (targetAmount: number, startDate: string, monthStartDay?: number) => void;
+  onSelectMonth: (monthId: string) => void;
   onUpdateTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   onAddEntry: (source: string, amount: number, date: string) => void;
   onUpdateEntry: (id: string, source: string, amount: number, date: string) => void;
@@ -80,6 +82,8 @@ function formatShortDate(value: string) {
 
 export default function HeroCard({
   salesPlan,
+  onAddMonth,
+  onSelectMonth,
   onUpdateTarget,
   onAddEntry,
   onUpdateEntry,
@@ -88,6 +92,7 @@ export default function HeroCard({
   const [showForm, setShowForm] = useState(false);
   const [showEntries, setShowEntries] = useState(false);
   const [editingTarget, setEditingTarget] = useState(false);
+  const [addingMonth, setAddingMonth] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [source, setSource] = useState("");
   const [amount, setAmount] = useState("");
@@ -95,6 +100,9 @@ export default function HeroCard({
   const [target, setTarget] = useState(String(salesPlan.targetAmount));
   const [deadline, setDeadline] = useState(salesPlan.deadline);
   const [monthStartDay, setMonthStartDay] = useState(String(salesPlan.monthStartDay || 1));
+  const [newMonthTarget, setNewMonthTarget] = useState(String(salesPlan.targetAmount));
+  const [newMonthStartDate, setNewMonthStartDate] = useState(localDate());
+  const [newMonthStartDay, setNewMonthStartDay] = useState(String(salesPlan.monthStartDay || 1));
   const [editSource, setEditSource] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState(localDate());
@@ -142,6 +150,16 @@ export default function HeroCard({
   const progress = salesPlan.targetAmount > 0 ? Math.min(1, achieved / salesPlan.targetAmount) : 0;
   const pct = Math.round(progress * 100);
 
+  const createMonth = () => {
+    const numericTarget = Number(newMonthTarget.replace(/\s/g, "").replace(",", "."));
+    const numericMonthStartDay = clampMonthStartDay(Number(newMonthStartDay));
+    if (!Number.isFinite(numericTarget) || numericTarget <= 0 || !newMonthStartDate) return;
+    onAddMonth(numericTarget, newMonthStartDate, numericMonthStartDay);
+    setAddingMonth(false);
+    setEditingTarget(false);
+    setShowEntries(false);
+  };
+
   const submitEntry = () => {
     const numericAmount = Number(amount.replace(/\s/g, "").replace(",", "."));
     if (!source.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0 || !entryDate) return;
@@ -185,8 +203,38 @@ export default function HeroCard({
     >
       <div className="flex items-start justify-between gap-5">
         <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <p className="text-[13px] text-ink-muted">План продаж</p>
+            <select
+              value={salesPlan.activeMonthId}
+              onChange={(event) => {
+                onSelectMonth(event.target.value);
+                setEditingTarget(false);
+                setAddingMonth(false);
+                setShowEntries(false);
+              }}
+              className="h-8 rounded-full border border-line bg-white px-3 text-[12px] font-medium text-ink-secondary outline-none"
+              aria-label="Выбрать месяц продаж"
+            >
+              {salesPlan.months.map((month) => (
+                <option key={month.id} value={month.id}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setNewMonthTarget(String(salesPlan.targetAmount));
+                setNewMonthStartDate(localDate());
+                setNewMonthStartDay(String(salesPlan.monthStartDay || 1));
+                setAddingMonth((value) => !value);
+                setEditingTarget(false);
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-white px-3 text-[12px] font-medium text-ink-secondary transition hover:bg-surface"
+            >
+              <Plus size={14} /> Новый месяц
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -194,6 +242,7 @@ export default function HeroCard({
                 setDeadline(salesPlan.deadline);
                 setMonthStartDay(String(salesPlan.monthStartDay || 1));
                 setEditingTarget((value) => !value);
+                setAddingMonth(false);
               }}
               className="rounded-lg p-1 text-ink-muted transition hover:bg-white hover:text-ink"
               aria-label="Редактировать план продаж"
@@ -259,6 +308,24 @@ export default function HeroCard({
           </div>
         </div>
       </div>
+
+      {addingMonth && (
+        <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_170px_150px_auto]">
+          <label className="grid gap-1 text-[12px] text-ink-muted">
+            Плановая сумма, $
+            <input inputMode="decimal" value={newMonthTarget} onChange={(e) => setNewMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+          </label>
+          <label className="grid gap-1 text-[12px] text-ink-muted">
+            Месяц начинается
+            <input type="date" value={newMonthStartDate} onChange={(e) => setNewMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+          </label>
+          <label className="grid gap-1 text-[12px] text-ink-muted">
+            Старт месяца
+            <input type="number" min="1" max="28" value={newMonthStartDay} onChange={(e) => setNewMonthStartDay(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+          </label>
+          <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Создать месяц</button>
+        </div>
+      )}
 
       {editingTarget && (
         <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_180px_auto]">

@@ -6,6 +6,7 @@ import type {
   GoalPhoto,
   GoalProgressEntry,
   NoteItem,
+  SalesMonthPlan,
   SalesPlan,
   Task,
 } from "./types";
@@ -27,6 +28,8 @@ interface PlannerContextValue {
   updateTask: (id: string, input: Partial<Omit<Task, "id">>) => void;
   addNote: (text: string) => void;
   deleteNote: (id: string) => void;
+  addSalesMonth: (targetAmount: number, startDate: string, monthStartDay?: number) => void;
+  selectSalesMonth: (monthId: string) => void;
   updateSalesTarget: (targetAmount: number, deadline: string, monthStartDay?: number) => void;
   addSaleEntry: (source: string, amount: number, date: string) => void;
   updateSaleEntry: (id: string, source: string, amount: number, date: string) => void;
@@ -89,6 +92,17 @@ const initialNotes: NoteItem[] = [
 ];
 
 const initialSalesPlan: SalesPlan = {
+  activeMonthId: "sales-month-current",
+  months: [{
+    id: "sales-month-current",
+    label: new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(new Date(`${today}T12:00:00`)),
+    targetAmount: 25_000,
+    deadline: today,
+    monthStartDay: 1,
+    entries: [
+      { id: "sale-1", source: "Основные продажи", amount: 16_800, date: today },
+    ],
+  }],
   targetAmount: 25_000,
   deadline: today,
   monthStartDay: 1,
@@ -123,12 +137,85 @@ function clampMonthStartDay(value: unknown) {
   return Math.min(28, Math.max(1, Math.round(numeric)));
 }
 
-function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): SalesPlan {
+function localDateFromDate(date: Date) {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
+
+function salesPeriodFor(dateValueString: string, startDay: number) {
+  const anchor = new Date(`${dateValueString}T12:00:00`);
+  const safeStartDay = clampMonthStartDay(startDay);
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), safeStartDay, 12);
+
+  if (anchor.getDate() < safeStartDay) {
+    start.setMonth(start.getMonth() - 1);
+  }
+
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  end.setDate(end.getDate() - 1);
+
   return {
+    start: localDateFromDate(start),
+    end: localDateFromDate(end),
+  };
+}
+
+function monthLabel(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+
+  if (sameMonth) {
+    return new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(start);
+  }
+
+  const startLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(start);
+  const endLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(end);
+  return `${startLabel} - ${endLabel}`;
+}
+
+function normalizeSalesMonth(raw: Partial<SalesMonthPlan> & Record<string, unknown>, fallbackId: string): SalesMonthPlan {
+  const monthStartDay = clampMonthStartDay(raw.monthStartDay);
+  const deadline = typeof raw.deadline === "string" && raw.deadline ? raw.deadline : salesPeriodFor(today, monthStartDay).end;
+  const period = salesPeriodFor(deadline, monthStartDay);
+
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : fallbackId,
+    label: typeof raw.label === "string" && raw.label ? raw.label : monthLabel(period.start, period.end),
     targetAmount: Number(raw.targetAmount) || initialSalesPlan.targetAmount,
-    deadline: typeof raw.deadline === "string" && raw.deadline ? raw.deadline : today,
-    monthStartDay: clampMonthStartDay(raw.monthStartDay),
+    deadline,
+    monthStartDay,
     entries: Array.isArray(raw.entries) ? raw.entries : [],
+  };
+}
+
+function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): SalesPlan {
+  const legacyMonth = normalizeSalesMonth({
+    id: "sales-month-current",
+    targetAmount: raw.targetAmount,
+    deadline: raw.deadline,
+    monthStartDay: raw.monthStartDay,
+    entries: raw.entries,
+  }, "sales-month-current");
+  const months = Array.isArray(raw.months) && raw.months.length > 0
+    ? raw.months.map((month, index) => normalizeSalesMonth(
+        month as Partial<SalesMonthPlan> & Record<string, unknown>,
+        `sales-month-${index}`,
+      ))
+    : [legacyMonth];
+  const activeMonthId = typeof raw.activeMonthId === "string" && months.some((month) => month.id === raw.activeMonthId)
+    ? raw.activeMonthId
+    : months[0].id;
+  const activeMonth = months.find((month) => month.id === activeMonthId) || months[0];
+
+  return {
+    activeMonthId,
+    months,
+    targetAmount: activeMonth.targetAmount,
+    deadline: activeMonth.deadline,
+    monthStartDay: activeMonth.monthStartDay,
+    entries: activeMonth.entries,
   };
 }
 
@@ -324,13 +411,53 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       void persist(tasksRef.current, nextNotes, salesPlanRef.current);
     },
 
-    updateSalesTarget: (targetAmount, deadline, monthStartDay) => {
-      const next = {
-        ...salesPlanRef.current,
+    addSalesMonth: (targetAmount, startDate, monthStartDay) => {
+      const safeStartDay = clampMonthStartDay(monthStartDay);
+      const period = salesPeriodFor(startDate || today, safeStartDay);
+      const month: SalesMonthPlan = {
+        id: crypto.randomUUID(),
+        label: monthLabel(period.start, period.end),
         targetAmount: Math.max(0, targetAmount),
-        deadline,
-        monthStartDay: clampMonthStartDay(monthStartDay ?? salesPlanRef.current.monthStartDay),
+        deadline: period.end,
+        monthStartDay: safeStartDay,
+        entries: [],
       };
+      const next = normalizeSalesPlan({
+        ...salesPlanRef.current,
+        activeMonthId: month.id,
+        months: [month, ...salesPlanRef.current.months],
+      });
+      applySalesPlan(next);
+      void persist(tasksRef.current, notesRef.current, next);
+    },
+
+    selectSalesMonth: (monthId) => {
+      const next = normalizeSalesPlan({
+        ...salesPlanRef.current,
+        activeMonthId: monthId,
+      });
+      applySalesPlan(next);
+      void persist(tasksRef.current, notesRef.current, next);
+    },
+
+    updateSalesTarget: (targetAmount, deadline, monthStartDay) => {
+      const activeMonthId = salesPlanRef.current.activeMonthId;
+      const nextMonths = salesPlanRef.current.months.map((month) => {
+        if (month.id !== activeMonthId) return month;
+        const safeStartDay = clampMonthStartDay(monthStartDay ?? month.monthStartDay);
+        const period = salesPeriodFor(deadline, safeStartDay);
+        return {
+          ...month,
+          label: monthLabel(period.start, period.end),
+          targetAmount: Math.max(0, targetAmount),
+          deadline,
+          monthStartDay: safeStartDay,
+        };
+      });
+      const next = normalizeSalesPlan({
+        ...salesPlanRef.current,
+        months: nextMonths,
+      });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);
     },
@@ -338,13 +465,22 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     addSaleEntry: (source, amount, date) => {
       const trimmed = source.trim();
       if (!trimmed || amount <= 0) return;
-      const next = {
+      const activeMonthId = salesPlanRef.current.activeMonthId;
+      const nextMonths = salesPlanRef.current.months.map((month) =>
+        month.id === activeMonthId
+          ? {
+              ...month,
+              entries: [
+                { id: crypto.randomUUID(), source: trimmed, amount, date },
+                ...month.entries,
+              ],
+            }
+          : month,
+      );
+      const next = normalizeSalesPlan({
         ...salesPlanRef.current,
-        entries: [
-          { id: crypto.randomUUID(), source: trimmed, amount, date },
-          ...salesPlanRef.current.entries,
-        ],
-      };
+        months: nextMonths,
+      });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);
     },
@@ -352,21 +488,29 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     updateSaleEntry: (id, source, amount, date) => {
       const trimmed = source.trim();
       if (!trimmed || amount <= 0 || !date) return;
-      const next = {
-        ...salesPlanRef.current,
-        entries: salesPlanRef.current.entries.map((entry) =>
+      const nextMonths = salesPlanRef.current.months.map((month) => ({
+        ...month,
+        entries: month.entries.map((entry) =>
           entry.id === id ? { ...entry, source: trimmed, amount, date } : entry,
         ),
-      };
+      }));
+      const next = normalizeSalesPlan({
+        ...salesPlanRef.current,
+        months: nextMonths,
+      });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);
     },
 
     deleteSaleEntry: (id) => {
-      const next = {
+      const nextMonths = salesPlanRef.current.months.map((month) => ({
+        ...month,
+        entries: month.entries.filter((entry) => entry.id !== id),
+      }));
+      const next = normalizeSalesPlan({
         ...salesPlanRef.current,
-        entries: salesPlanRef.current.entries.filter((entry) => entry.id !== id),
-      };
+        months: nextMonths,
+      });
       applySalesPlan(next);
       void persist(tasksRef.current, notesRef.current, next);
     },

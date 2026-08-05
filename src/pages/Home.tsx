@@ -23,6 +23,8 @@ export default function Home() {
     addTask,
     addNote,
     deleteNote,
+    addSalesMonth,
+    selectSalesMonth,
     updateSalesTarget,
     addSaleEntry,
     updateSaleEntry,
@@ -70,6 +72,8 @@ export default function Home() {
 
       <HeroCard
         salesPlan={salesPlan}
+        onAddMonth={addSalesMonth}
+        onSelectMonth={selectSalesMonth}
         onUpdateTarget={updateSalesTarget}
         onAddEntry={addSaleEntry}
         onUpdateEntry={updateSaleEntry}
