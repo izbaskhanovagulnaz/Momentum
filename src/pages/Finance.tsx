@@ -42,26 +42,29 @@ export default function Finance() {
   } = usePlanner();
   const [tab, setTab] = useState("overview");
   const [incomeAmount, setIncomeAmount] = useState("");
-  const [incomeCurrency, setIncomeCurrency] = useState<Currency>("USD");
+  const [incomeCurrency, setIncomeCurrency] = useState<Currency>("UZS");
   const [incomeSource, setIncomeSource] = useState("Зарплата");
   const [incomeDate, setIncomeDate] = useState(today());
   const [incomeSavingsPercent, setIncomeSavingsPercent] = useState("0");
   const [incomeFromSavings, setIncomeFromSavings] = useState("0");
   const [expenseAmount, setExpenseAmount] = useState("");
-  const [expenseCurrency, setExpenseCurrency] = useState<Currency>("USD");
+  const [expenseCurrency, setExpenseCurrency] = useState<Currency>("UZS");
   const [expenseCategory, setExpenseCategory] = useState("Еда");
   const [expenseDate, setExpenseDate] = useState(today());
   const [plannedTitle, setPlannedTitle] = useState("");
   const [plannedAmount, setPlannedAmount] = useState("");
-  const [plannedCurrency, setPlannedCurrency] = useState<Currency>("USD");
+  const [plannedCurrency, setPlannedCurrency] = useState<Currency>("UZS");
   const [plannedDate, setPlannedDate] = useState(today());
   const [debtPerson, setDebtPerson] = useState("");
   const [debtAmount, setDebtAmount] = useState("");
-  const [debtCurrency, setDebtCurrency] = useState<Currency>("USD");
+  const [debtCurrency, setDebtCurrency] = useState<Currency>("UZS");
   const [debtDate, setDebtDate] = useState(today());
   const [convertAmount, setConvertAmount] = useState("");
   const [fromCurrency, setFromCurrency] = useState<Currency>("USD");
   const [toCurrency, setToCurrency] = useState<Currency>("UZS");
+  const [rateUsd, setRateUsd] = useState(String(finance.rates.USD));
+  const [rateUzs, setRateUzs] = useState(String(finance.rates.UZS));
+  const [rateRub, setRateRub] = useState(String(finance.rates.RUB));
 
   const toUsd = (amount: number, currency: Currency) => amount / finance.rates[currency];
   const fromUsd = (amount: number, currency: Currency) => amount * finance.rates[currency];
@@ -83,6 +86,16 @@ export default function Finance() {
 
     return { incomes, savings, expenses, planned, debts, available, shortage: Math.max(0, futureNeed - available), expectedSalary };
   }, [finance, salesPlan.entries]);
+
+  const summaryUzs = {
+    incomes: fromUsd(summary.incomes, "UZS"),
+    savings: fromUsd(summary.savings, "UZS"),
+    expenses: fromUsd(summary.expenses, "UZS"),
+    planned: fromUsd(summary.planned, "UZS"),
+    debts: fromUsd(summary.debts, "UZS"),
+    available: fromUsd(summary.available, "UZS"),
+    shortage: fromUsd(summary.shortage, "UZS"),
+  };
 
   const addIncome = () => {
     const amount = numberValue(incomeAmount);
@@ -122,6 +135,12 @@ export default function Finance() {
     setDebtAmount("");
   };
 
+  const saveRates = () => {
+    updateExchangeRate("USD", numberValue(rateUsd));
+    updateExchangeRate("UZS", numberValue(rateUzs));
+    updateExchangeRate("RUB", numberValue(rateRub));
+  };
+
   const converted = useMemo(() => {
     const amount = numberValue(convertAmount || "0");
     if (!Number.isFinite(amount)) return 0;
@@ -149,18 +168,18 @@ export default function Finance() {
       </div>
 
       <div className="mb-5 grid gap-3 md:grid-cols-4">
-        <Metric label="Сейчас есть" value={money(summary.available, "USD")} />
-        <Metric label="Доходы" value={money(summary.incomes, "USD")} />
-        <Metric label="Расходы" value={money(summary.expenses, "USD")} />
-        <Metric label="Не хватает" value={money(summary.shortage, "USD")} />
+        <Metric label="Сейчас есть" value={money(summaryUzs.available, "UZS")} />
+        <Metric label="Доходы" value={money(summaryUzs.incomes, "UZS")} />
+        <Metric label="Расходы" value={money(summaryUzs.expenses, "UZS")} />
+        <Metric label="Не хватает" value={money(summaryUzs.shortage, "UZS")} />
       </div>
 
       {tab === "overview" && (
         <div className="grid gap-4 md:grid-cols-2">
-          <Metric label="Накопления" value={money(summary.savings, "USD")} />
-          <Metric label="Будущие расходы" value={money(summary.planned, "USD")} />
-          <Metric label="Долги" value={money(summary.debts, "USD")} />
-          <Metric label="Ожидаемая зарплата от продаж" value={money(summary.expectedSalary, "USD")} />
+          <Metric label="Накопления" value={money(summaryUzs.savings, "UZS")} />
+          <Metric label="Будущие расходы" value={money(summaryUzs.planned, "UZS")} />
+          <Metric label="Долги" value={money(summaryUzs.debts, "UZS")} />
+          <Metric label="Ожидаемая зарплата от продаж (USD)" value={money(summary.expectedSalary, "USD")} />
         </div>
       )}
 
@@ -200,7 +219,7 @@ export default function Finance() {
             <Input label="Дата оплаты" type="date" value={plannedDate} onChange={setPlannedDate} />
             <button type="button" onClick={savePlanned} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить</button>
           </div>
-          <FinanceRows items={finance.plannedExpenses.map((item) => ({ id: item.id, title: item.title, meta: `${item.dueDate} · ${item.status}`, value: money(item.amount, item.currency), onDelete: () => deletePlannedExpense(item.id), action: () => updatePlannedExpenseStatus(item.id, item.status === "paid" ? "planned" : "paid"), actionLabel: item.status === "paid" ? "Вернуть" : "Оплачено" }))} />
+          <FinanceRows items={finance.plannedExpenses.map((item) => ({ id: item.id, title: item.title, meta: `${item.dueDate} · ${item.status}`, value: money(item.amount, item.currency), onDelete: () => deletePlannedExpense(item.id), action: () => updatePlannedExpenseStatus(item.id, item.status === "paid" ? "planned" : "paid"), actionLabel: item.status === "paid" ? "Сохранить как план" : "Сохранить оплату" }))} />
         </Panel>
       )}
 
@@ -213,17 +232,18 @@ export default function Finance() {
             <Input label="До какого" type="date" value={debtDate} onChange={setDebtDate} />
             <button type="button" onClick={saveDebt} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить</button>
           </div>
-          <FinanceRows items={finance.debts.map((item) => ({ id: item.id, title: item.person, meta: `${item.dueDate} · погашено ${money(item.paidAmount, item.currency)}`, value: money(item.amount, item.currency), onDelete: () => deleteDebt(item.id), action: () => updateDebt(item.id, item.amount), actionLabel: "Закрыть" }))} />
+          <FinanceRows items={finance.debts.map((item) => ({ id: item.id, title: item.person, meta: `${item.dueDate} · погашено ${money(item.paidAmount, item.currency)}`, value: money(item.amount, item.currency), onDelete: () => deleteDebt(item.id), action: () => updateDebt(item.id, item.amount), actionLabel: "Сохранить закрытие" }))} />
         </Panel>
       )}
 
       {tab === "converter" && (
         <Panel title="Конвертер">
           <div className="grid gap-3 md:grid-cols-3">
-            {currencies.map((currency) => (
-              <Input key={currency} label={`Курс ${currency} к USD`} value={String(finance.rates[currency])} onChange={(value) => updateExchangeRate(currency, numberValue(value))} />
-            ))}
+            <Input label="Курс USD к USD" value={rateUsd} onChange={setRateUsd} />
+            <Input label="Курс UZS к USD" value={rateUzs} onChange={setRateUzs} />
+            <Input label="Курс RUB к USD" value={rateRub} onChange={setRateRub} />
           </div>
+          <button type="button" onClick={saveRates} className="mt-3 rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить курсы</button>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_120px_120px_1fr]">
             <Input label="Сумма" value={convertAmount} onChange={setConvertAmount} />
             <Select label="Из" value={fromCurrency} onChange={(value) => setFromCurrency(value as Currency)} options={currencies} />
