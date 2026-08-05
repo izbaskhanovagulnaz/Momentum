@@ -14,6 +14,67 @@ body {
   @apply bg-white text-ink font-sans antialiased;
 }
 
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .bg-white {
+  background-color: #111317;
+}
+
+:root[data-theme="dark"] .bg-surface-subtle,
+:root[data-theme="dark"] .bg-surface {
+  background-color: #181b21;
+}
+
+:root[data-theme="dark"] .bg-accent-soft {
+  background-color: rgba(93, 126, 255, 0.16);
+}
+
+:root[data-theme="dark"] .bg-success-soft {
+  background-color: rgba(29, 185, 129, 0.16);
+}
+
+:root[data-theme="dark"] .bg-danger-soft {
+  background-color: rgba(239, 68, 68, 0.16);
+}
+
+:root[data-theme="dark"] .text-ink {
+  color: #f4f6fb;
+}
+
+:root[data-theme="dark"] .text-ink-secondary {
+  color: #b9bfca;
+}
+
+:root[data-theme="dark"] .text-ink-muted {
+  color: #858d9b;
+}
+
+:root[data-theme="dark"] .border-line,
+:root[data-theme="dark"] .border-line-strong,
+:root[data-theme="dark"] .divide-line > :not([hidden]) ~ :not([hidden]),
+:root[data-theme="dark"] .divide-line-strong > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2a2f38;
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select {
+  background-color: #151820;
+  color: #f4f6fb;
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: #697282;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }

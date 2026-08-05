@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import TopBar from "../components/TopBar";
 import { Bell, Moon, Globe, LogOut, Cloud } from "lucide-react";
@@ -6,11 +6,15 @@ import { useAuth } from "../AuthContext";
 import { usePlanner } from "../PlannerContext";
 
 export default function Settings() {
-  const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("momentum-theme") === "dark");
   const { user, logout } = useAuth();
   const { syncStatus } = usePlanner();
   const name = user?.displayName || "Гульназ";
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    localStorage.setItem("momentum-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   return (
     <div>
@@ -28,7 +32,7 @@ export default function Settings() {
 
       <div className="divide-y divide-line rounded-3xl border border-line">
         <SettingsRow icon={<Cloud size={18} />} label="Синхронизация" control={<span className="text-[13px] text-ink-muted">{syncLabel(syncStatus)}</span>} />
-        <SettingsRow icon={<Bell size={18} />} label="Уведомления" control={<Toggle checked={notifications} onChange={() => setNotifications((v) => !v)} />} />
+        <SettingsRow icon={<Bell size={18} />} label="Уведомления" control={<span className="rounded-full bg-surface-subtle px-3 py-1 text-[12px] font-medium text-ink-muted">Скоро</span>} />
         <SettingsRow icon={<Moon size={18} />} label="Тёмная тема" control={<Toggle checked={darkMode} onChange={() => setDarkMode((v) => !v)} />} />
         <SettingsRow icon={<Globe size={18} />} label="Язык" control={<span className="text-[13px] text-ink-muted">Русский</span>} />
         <button type="button" onClick={() => void logout()} className="flex w-full items-center justify-between px-5 py-4 text-left">

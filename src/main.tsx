@@ -7,6 +7,9 @@ import { PlannerProvider } from "./PlannerContext";
 import { AuthProvider, useAuth } from "./AuthContext";
 import AuthScreen from "./components/AuthScreen";
 
+const savedTheme = localStorage.getItem("momentum-theme");
+document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
+
 function RootApp() {
   const { user, loading } = useAuth();
 
