@@ -1,3 +1,8 @@
+export type TaskCategory = "work" | "personal" | "health" | "finance" | "study";
+
+/** Правило повтора. Базовой датой серии всегда служит `Task.date`. */
+export type TaskRepeat = "daily" | "weekdays" | "weekly" | "monthly";
+
 export interface Task {
   id: string;
   title: string;
@@ -8,6 +13,27 @@ export interface Task {
   /** Конец задачи, HH:MM. Всегда позже `time`. */
   endTime?: string;
   priority?: "high" | "normal" | "low";
+  category?: TaskCategory;
+  repeat?: TaskRepeat;
+  /** Последний день серии включительно. Пусто — серия бесконечна. */
+  repeatUntil?: string;
+  /** Даты выполненных вхождений серии. */
+  repeatDone?: string[];
+  /** Даты удалённых вхождений серии. */
+  repeatSkip?: string[];
+}
+
+/**
+ * Одно вхождение задачи в конкретный день. Для обычных задач совпадает с самой
+ * задачей, для повторов — сгенерировано из серии и живёт только в UI.
+ */
+export interface TaskOccurrence extends Task {
+  /** Уникальный ключ вхождения: `id` либо `id::дата`. */
+  key: string;
+  /** true, если вхождение сгенерировано правилом повтора. */
+  virtual: boolean;
+  /** Дата самой задачи — для серии это её начало, а не дата вхождения. */
+  seriesStart: string;
 }
 
 export type GoalTrackingType = "accumulative" | "measurement" | "checklist";

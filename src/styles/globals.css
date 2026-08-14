@@ -42,6 +42,17 @@ body,
   );
   --lens-rim: 1;
   --lens-shadow: 0 8px 18px -10px rgba(58, 62, 110, 0.55), inset 0 -5px 12px -6px rgba(255, 255, 255, 1);
+
+  /* The bottom nav floats over arbitrary, sometimes vivid, page content
+     (a purple goal card, a gradient hero) — it needs to stay legible no
+     matter what scrolls underneath, so it gets a much less transparent
+     material than the sidebar's glass. */
+  --glass-bg-nav: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.86) 50%,
+    rgba(255, 255, 255, 0.9) 100%
+  );
 }
 
 body {
@@ -79,6 +90,13 @@ body {
   );
   --lens-rim: 0.42;
   --lens-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8), inset 0 -5px 12px -6px rgba(255, 255, 255, 0.16);
+
+  --glass-bg-nav: linear-gradient(
+    145deg,
+    rgba(41, 37, 61, 0.94) 0%,
+    rgba(24, 21, 38, 0.9) 50%,
+    rgba(34, 30, 52, 0.92) 100%
+  );
 }
 
 :root[data-theme="dark"] .bg-white,
@@ -135,6 +153,61 @@ body {
 :root[data-theme="dark"] input::placeholder,
 :root[data-theme="dark"] textarea::placeholder {
   color: #6f6b90;
+}
+
+:root[data-theme="dark"] .bg-sky-soft {
+  background-color: rgba(63, 184, 232, 0.16);
+}
+
+:root[data-theme="dark"] .bg-mint-soft {
+  background-color: rgba(52, 211, 163, 0.16);
+}
+
+:root[data-theme="dark"] .bg-peach-soft {
+  background-color: rgba(255, 148, 102, 0.16);
+}
+
+/* Подложки календаря. Модификаторы прозрачности Tailwind (`bg-x/30`) создают
+   отдельный класс, мимо которого проходят переопределения темы, — поэтому
+   тонированные поверхности заданы явными парами значений. */
+.cal-weekend {
+  background-color: rgba(244, 104, 95, 0.07);
+}
+
+.cal-outside {
+  background-color: rgba(155, 152, 181, 0.09);
+}
+
+.cal-night {
+  background-color: rgba(155, 152, 181, 0.13);
+}
+
+.cal-selected-col {
+  background-color: rgba(111, 92, 246, 0.08);
+}
+
+.cal-slot:hover {
+  background-color: rgba(111, 92, 246, 0.1);
+}
+
+:root[data-theme="dark"] .cal-weekend {
+  background-color: rgba(244, 104, 95, 0.12);
+}
+
+:root[data-theme="dark"] .cal-outside {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="dark"] .cal-night {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="dark"] .cal-selected-col {
+  background-color: rgba(111, 92, 246, 0.22);
+}
+
+:root[data-theme="dark"] .cal-slot:hover {
+  background-color: rgba(111, 92, 246, 0.24);
 }
 
 * {
@@ -301,6 +374,11 @@ body {
 
   .glass-press {
     @apply transition-transform duration-200 ease-out active:scale-[0.94];
+  }
+
+  /* Stronger backing so labels stay readable over any page content. */
+  .glass-nav {
+    background: var(--glass-bg-nav);
   }
 }
 

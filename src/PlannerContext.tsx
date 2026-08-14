@@ -16,6 +16,8 @@ import type {
   SalesMonthPlan,
   SalesPlan,
   Task,
+  TaskCategory,
+  TaskRepeat,
 } from "./types";
 import { normalizeGoal, recalculateGoal } from "./goalUtils";
 import { deleteField, firestore, serverTimestamp } from "./firebase";
@@ -271,12 +273,24 @@ function normalizeClock(raw: unknown) {
   return /^\d{2}:\d{2}$/.test(normalized) ? normalized : undefined;
 }
 
+const TASK_CATEGORIES = new Set<TaskCategory>(["work", "personal", "health", "finance", "study"]);
+const TASK_REPEATS = new Set<TaskRepeat>(["daily", "weekdays", "weekly", "monthly"]);
+
+function normalizeDateList(raw: unknown) {
+  if (!Array.isArray(raw)) return undefined;
+  const dates = raw.filter(
+    (value): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value),
+  );
+  return dates.length > 0 ? [...new Set(dates)].sort() : undefined;
+}
+
 function normalizeTask(raw: Partial<Task> & Record<string, unknown>, fallbackIndex: number): Task {
   const time = normalizeClock(raw.time);
   const endTime = normalizeClock(raw.endTime);
   const priority = raw.priority === "high" || raw.priority === "normal" || raw.priority === "low"
     ? raw.priority
     : "normal";
+  const repeat = TASK_REPEATS.has(raw.repeat as TaskRepeat) ? (raw.repeat as TaskRepeat) : undefined;
 
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : String(raw.id || `legacy-task-${fallbackIndex}`),
@@ -287,6 +301,15 @@ function normalizeTask(raw: Partial<Task> & Record<string, unknown>, fallbackInd
     // Конец без начала или раньше начала смысла не имеет.
     endTime: time && endTime && endTime > time ? endTime : undefined,
     priority,
+    category: TASK_CATEGORIES.has(raw.category as TaskCategory) ? (raw.category as TaskCategory) : undefined,
+    repeat,
+    // Границы и исключения существуют только у серии.
+    repeatUntil:
+      repeat && typeof raw.repeatUntil === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.repeatUntil)
+        ? raw.repeatUntil
+        : undefined,
+    repeatDone: repeat ? normalizeDateList(raw.repeatDone) : undefined,
+    repeatSkip: repeat ? normalizeDateList(raw.repeatSkip) : undefined,
   };
 }
 
@@ -459,77 +482,88 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     tasksCollectionRef.current = tasksRef;
 
     const unsubscribe = ref.onSnapshot(async (snapshot) => {
-      if (!snapshot.exists) {
-        const legacySnapshot = await rootRef.get();
-        const legacyPlanner = legacySnapshot.exists
-          ? (legacySnapshot.data() as { planner?: Partial<PlannerDocument> }).planner
-          : null;
-        const initial: PlannerDocument = legacyPlanner && typeof legacyPlanner === "object"
-          ? {
-              tasks: normalizeTasks(legacyPlanner.tasks),
-              notes: Array.isArray(legacyPlanner.notes) ? legacyPlanner.notes : initialNotes,
-              salesPlan: legacyPlanner.salesPlan && typeof legacyPlanner.salesPlan === "object"
-                ? normalizeSalesPlan(legacyPlanner.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
-                : initialSalesPlan,
-              finance: legacyPlanner.finance && typeof legacyPlanner.finance === "object"
-                ? normalizeFinance(legacyPlanner.finance as Partial<FinanceState> & Record<string, unknown>)
-                : initialFinance,
-              goals: Array.isArray(legacyPlanner.goals)
-                ? legacyPlanner.goals.map((goal) => normalizeGoal(
-                    goal as unknown as Partial<Goal> & Record<string, unknown>,
-                    localDate(),
-                  ))
-                : initialGoals,
-            }
-          : {
-              tasks: initialTasks,
-              notes: initialNotes,
-              salesPlan: initialSalesPlan,
-              finance: initialFinance,
-              goals: initialGoals,
-            };
-        applyTasks(initial.tasks);
-        applyNotes(initial.notes);
-        applySalesPlan(initial.salesPlan);
-        applyFinance(initial.finance);
-        applyGoals(initial.goals);
-        await ref.set({ ...initial, tasksMigrated: false, updatedAt: serverTimestamp() });
-        await rootRef.set({ planner: initial, updatedAt: serverTimestamp() }, { merge: true });
-      } else {
-        const remote = snapshot.data() as Partial<PlannerDocument>;
-        const normalizedSalesPlan = remote.salesPlan && typeof remote.salesPlan === "object"
-          ? normalizeSalesPlan(remote.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
-          : initialSalesPlan;
-        const normalizedFinance = remote.finance && typeof remote.finance === "object"
-          ? normalizeFinance(remote.finance as Partial<FinanceState> & Record<string, unknown>)
-          : initialFinance;
-        const normalizedGoals = Array.isArray(remote.goals)
-          ? remote.goals.map((goal) => normalizeGoal(
-              goal as unknown as Partial<Goal> & Record<string, unknown>,
-              localDate(),
-            ))
-          : initialGoals;
-        applyNotes(Array.isArray(remote.notes) ? remote.notes : []);
-        applySalesPlan(normalizedSalesPlan);
-        applyFinance(normalizedFinance);
-        applyGoals(normalizedGoals);
+      // Колбэк асинхронный, и его отказ никто не ловит: без try/catch любая
+      // упавшая запись (миграция, правила, оффлайн) оставила бы loading = true
+      // навсегда, хотя данные уже пришли.
+      let failed = false;
 
-        const normalizedDocument = {
-          notes: Array.isArray(remote.notes) ? remote.notes : [],
-          salesPlan: normalizedSalesPlan,
-          finance: normalizedFinance,
-          goals: normalizedGoals,
-        };
-        void rootRef.set({ planner: normalizedDocument, updatedAt: serverTimestamp() }, { merge: true });
-        if (!remote.tasksMigrated) {
-          const legacyTasks = normalizeTasks(remote.tasks);
-          await Promise.all(legacyTasks.map((task) => tasksRef.doc(task.id).set({ ...task }, { merge: true })));
-          await ref.set({ tasksMigrated: true, updatedAt: serverTimestamp() }, { merge: true });
+      try {
+        if (!snapshot.exists) {
+          const legacySnapshot = await rootRef.get();
+          const legacyPlanner = legacySnapshot.exists
+            ? (legacySnapshot.data() as { planner?: Partial<PlannerDocument> }).planner
+            : null;
+          const initial: PlannerDocument = legacyPlanner && typeof legacyPlanner === "object"
+            ? {
+                tasks: normalizeTasks(legacyPlanner.tasks),
+                notes: Array.isArray(legacyPlanner.notes) ? legacyPlanner.notes : initialNotes,
+                salesPlan: legacyPlanner.salesPlan && typeof legacyPlanner.salesPlan === "object"
+                  ? normalizeSalesPlan(legacyPlanner.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
+                  : initialSalesPlan,
+                finance: legacyPlanner.finance && typeof legacyPlanner.finance === "object"
+                  ? normalizeFinance(legacyPlanner.finance as Partial<FinanceState> & Record<string, unknown>)
+                  : initialFinance,
+                goals: Array.isArray(legacyPlanner.goals)
+                  ? legacyPlanner.goals.map((goal) => normalizeGoal(
+                      goal as unknown as Partial<Goal> & Record<string, unknown>,
+                      localDate(),
+                    ))
+                  : initialGoals,
+              }
+            : {
+                tasks: initialTasks,
+                notes: initialNotes,
+                salesPlan: initialSalesPlan,
+                finance: initialFinance,
+                goals: initialGoals,
+              };
+          applyTasks(initial.tasks);
+          applyNotes(initial.notes);
+          applySalesPlan(initial.salesPlan);
+          applyFinance(initial.finance);
+          applyGoals(initial.goals);
+          await ref.set({ ...initial, tasksMigrated: false, updatedAt: serverTimestamp() });
+          await rootRef.set({ planner: initial, updatedAt: serverTimestamp() }, { merge: true });
+        } else {
+          const remote = snapshot.data() as Partial<PlannerDocument>;
+          const normalizedSalesPlan = remote.salesPlan && typeof remote.salesPlan === "object"
+            ? normalizeSalesPlan(remote.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
+            : initialSalesPlan;
+          const normalizedFinance = remote.finance && typeof remote.finance === "object"
+            ? normalizeFinance(remote.finance as Partial<FinanceState> & Record<string, unknown>)
+            : initialFinance;
+          const normalizedGoals = Array.isArray(remote.goals)
+            ? remote.goals.map((goal) => normalizeGoal(
+                goal as unknown as Partial<Goal> & Record<string, unknown>,
+                localDate(),
+              ))
+            : initialGoals;
+          applyNotes(Array.isArray(remote.notes) ? remote.notes : []);
+          applySalesPlan(normalizedSalesPlan);
+          applyFinance(normalizedFinance);
+          applyGoals(normalizedGoals);
+
+          const normalizedDocument = {
+            notes: Array.isArray(remote.notes) ? remote.notes : [],
+            salesPlan: normalizedSalesPlan,
+            finance: normalizedFinance,
+            goals: normalizedGoals,
+          };
+          void rootRef.set({ planner: normalizedDocument, updatedAt: serverTimestamp() }, { merge: true });
+          if (!remote.tasksMigrated) {
+            const legacyTasks = normalizeTasks(remote.tasks);
+            await Promise.all(legacyTasks.map((task) => tasksRef.doc(task.id).set({ ...task }, { merge: true })));
+            await ref.set({ tasksMigrated: true, updatedAt: serverTimestamp() }, { merge: true });
+          }
         }
+      } catch (reason) {
+        console.error(reason);
+        failed = true;
       }
 
       setLoading(false);
-      if (pendingWritesRef.current === 0) setSyncStatus("synced");
+      if (failed) setSyncStatus("error");
+      else if (pendingWritesRef.current === 0) setSyncStatus("synced");
     }, (reason) => {
       console.error(reason);
       setLoading(false);

@@ -23,8 +23,8 @@ const LENS_SPRING = { type: "spring", stiffness: 520, damping: 34, mass: 0.9 } a
 
 export default function BottomNav() {
   return (
-    <nav className="safe-bottom pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4 pt-2 md:hidden">
-      <div className="glass pointer-events-auto mx-auto flex max-w-[430px] items-stretch gap-0.5 rounded-[30px] p-1.5">
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 md:hidden">
+      <div className="glass glass-nav pointer-events-auto mx-auto flex max-w-[430px] items-stretch gap-0.5 rounded-[30px] p-1.5">
         {ITEMS.map(({ to, label, icon: Icon, end, tint }) => (
           <NavLink
             key={to}
