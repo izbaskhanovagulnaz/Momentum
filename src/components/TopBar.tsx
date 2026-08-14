@@ -8,10 +8,10 @@ interface TopBarProps {
 
 export default function TopBar({ eyebrow, title, action }: TopBarProps) {
   return (
-    <div className="mb-8 flex items-center justify-between">
+    <div className="mb-7 flex items-start justify-between gap-4">
       <div>
         {eyebrow && <p className="mb-1 text-[13px] text-ink-muted">{eyebrow}</p>}
-        <h1 className="text-[26px] font-semibold tracking-tight text-ink md:text-[30px]">
+        <h1 className="text-[28px] font-semibold leading-tight text-ink md:text-[34px]">
           {title}
         </h1>
       </div>

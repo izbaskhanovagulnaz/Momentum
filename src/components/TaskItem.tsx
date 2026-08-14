@@ -1,4 +1,5 @@
-import { Trash2 } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
 import type { Task } from "../types";
 
 interface TaskItemProps {
@@ -9,28 +10,33 @@ interface TaskItemProps {
 
 export default function TaskItem({ task, onToggle, onDelete }: TaskItemProps) {
   return (
-    <div className="group flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+    <motion.div
+      layout
+      className={`group flex min-h-[52px] items-center gap-3 py-2.5 transition ${
+        task.done ? "opacity-55" : "opacity-100"
+      }`}
+    >
       <button
         type="button"
         onClick={() => onToggle(task.id)}
-        aria-label={task.done ? "Отметить невыполненной" : "Отметить выполненной"}
-        className={`flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-full border transition-colors md:h-5 md:w-5 ${
-          task.done ? "border-success bg-success" : "border-line-strong bg-white"
+        aria-label={task.done ? "Вернуть задачу" : "Выполнить задачу"}
+        className={`flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-full border transition md:h-6 md:w-6 ${
+          task.done
+            ? "border-success bg-success text-white"
+            : "border-line-strong bg-white text-transparent hover:border-ink"
         }`}
       >
-        {task.done && (
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-            <path d="M1.5 5.5L4 8L9.5 2" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
+        <Check size={14} />
       </button>
 
-      <span className={`min-w-0 flex-1 text-[14px] ${task.done ? "text-ink-muted line-through" : "text-ink"}`}>
+      <span className={`min-w-0 flex-1 truncate text-[14px] ${task.done ? "text-ink-muted line-through" : "text-ink"}`}>
         {task.title}
       </span>
 
       {task.priority === "high" && !task.done && (
-        <span className="text-[11px] font-medium text-danger">срочно</span>
+        <span className="rounded-full bg-danger-soft px-2 py-1 text-[11px] font-medium text-danger">
+          высокий
+        </span>
       )}
       {task.time && !task.done && (
         <span className="font-mono text-[11px] text-ink-muted">{task.time}</span>
@@ -39,13 +45,13 @@ export default function TaskItem({ task, onToggle, onDelete }: TaskItemProps) {
         <button
           type="button"
           onClick={() => onDelete(task.id)}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-muted transition hover:bg-danger-soft hover:text-danger md:h-8 md:w-8 md:opacity-0 md:group-hover:opacity-100"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-muted transition hover:bg-danger-soft hover:text-danger md:h-8 md:w-8 md:opacity-0 md:group-hover:opacity-100"
           aria-label={`Удалить задачу ${task.title}`}
           title="Удалить задачу"
         >
           <Trash2 size={16} />
         </button>
       )}
-    </div>
+    </motion.div>
   );
 }

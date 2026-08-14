@@ -45,6 +45,7 @@ import type {
   GoalProgressEntry,
   GoalTrackingType,
 } from "../types";
+import { localDate } from "../utils";
 
 type GoalFilter = "all" | "active" | "completed";
 
@@ -74,8 +75,6 @@ interface PhotoEditorState {
   error: string;
 }
 
-const TODAY = localDate();
-
 const EMPTY_FORM: GoalEditorForm = {
   title: "",
   description: "",
@@ -95,11 +94,6 @@ const TYPE_ICONS: Record<GoalTrackingType, typeof TrendingUp> = {
 };
 
 const UNIT_PRESETS = ["$", "₽", "сум", "кг", "%", "книг", "клиентов", "тренировок", "км", "уроков"];
-
-function localDate(date = new Date()) {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
 
 function formatDate(value?: string) {
   if (!value) return "Без даты";
@@ -482,7 +476,7 @@ export default function Goals() {
       goalId: goal.id,
       entryId: entry?.id,
       value: entry ? String(entry.value) : "",
-      date: entry?.date || TODAY,
+      date: entry?.date || localDate(),
       note: entry?.note || "",
     });
   };
@@ -534,7 +528,7 @@ export default function Goals() {
       goalId: goal.id,
       photoId: photo?.id,
       dataUrl: photo?.dataUrl || "",
-      date: photo?.date || TODAY,
+      date: photo?.date || localDate(),
       caption: photo?.caption || "",
       loading: false,
       error: "",

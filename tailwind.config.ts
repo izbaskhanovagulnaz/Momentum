@@ -6,38 +6,60 @@ export default {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#111113",
-          secondary: "#6b6b70",
-          muted: "#a1a1aa",
+          DEFAULT: "#22213a",
+          secondary: "#6f6d8a",
+          muted: "#9b98b5",
         },
         line: {
-          DEFAULT: "#ececec",
-          strong: "#e0e0e0",
+          DEFAULT: "#e6e4f4",
+          strong: "#d8d5ef",
         },
         surface: {
           DEFAULT: "#ffffff",
-          subtle: "#fafafa",
+          subtle: "#eef0fa",
         },
         accent: {
-          DEFAULT: "#3b66f5",
-          soft: "#eef2ff",
+          DEFAULT: "#6f5cf6",
+          soft: "#ece8ff",
         },
         success: {
-          DEFAULT: "#1db981",
-          soft: "#e7f9f1",
+          DEFAULT: "#22c58b",
+          soft: "#e2f9ef",
         },
         danger: {
-          DEFAULT: "#ef4444",
-          soft: "#fef1f1",
+          DEFAULT: "#f4685f",
+          soft: "#feeae8",
         },
         warning: {
-          DEFAULT: "#f5a524",
-          soft: "#fff6e6",
+          DEFAULT: "#f6a94f",
+          soft: "#fff1de",
+        },
+        sky: {
+          DEFAULT: "#3fb8e8",
+          soft: "#e2f5fd",
+        },
+        peach: {
+          DEFAULT: "#ff9466",
+          soft: "#ffece2",
+        },
+        mint: {
+          DEFAULT: "#34d3a3",
+          soft: "#e2f9f1",
         },
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+      },
+      borderRadius: {
+        "4xl": "1.75rem",
+        "5xl": "2.25rem",
+      },
+      boxShadow: {
+        neu: "var(--shadow-neu)",
+        "neu-sm": "var(--shadow-neu-sm)",
+        "neu-inset": "var(--shadow-neu-inset)",
+        "neu-pressed": "var(--shadow-neu-pressed)",
       },
     },
   },

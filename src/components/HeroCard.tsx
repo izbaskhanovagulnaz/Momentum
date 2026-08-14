@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { SaleEntry, SalesPlan } from "../types";
+import { clampMonthStartDay, localDate, salesPeriodFor } from "../utils";
 
 interface HeroCardProps {
   salesPlan: SalesPlan;
@@ -26,45 +27,11 @@ function money(value: number) {
   }).format(value);
 }
 
-function localDate() {
-  const now = new Date();
-  const offset = now.getTimezoneOffset();
-  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
-
-function dateValue(date: Date) {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
-
 function parseEntryDate(rawDate: string) {
   if (!rawDate) return "";
   const match = rawDate.match(/^\d{4}-\d{2}-\d{2}/);
   if (!match) return "";
   return match[0];
-}
-
-function clampMonthStartDay(value: number) {
-  return Math.min(28, Math.max(1, Math.round(value)));
-}
-
-function salesPeriodFor(dateValueString: string, startDay: number) {
-  const anchor = new Date(`${dateValueString}T12:00:00`);
-  const safeStartDay = clampMonthStartDay(startDay || 1);
-  const start = new Date(anchor.getFullYear(), anchor.getMonth(), safeStartDay, 12);
-
-  if (anchor.getDate() < safeStartDay) {
-    start.setMonth(start.getMonth() - 1);
-  }
-
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
-  end.setDate(end.getDate() - 1);
-
-  return {
-    start: dateValue(start),
-    end: dateValue(end),
-  };
 }
 
 function formatDate(value: string) {
@@ -95,6 +62,7 @@ export default function HeroCard({
 }: HeroCardProps) {
   const [showForm, setShowForm] = useState(false);
   const [showEntries, setShowEntries] = useState(false);
+  const [showAllMonths, setShowAllMonths] = useState(false);
   const [editingTarget, setEditingTarget] = useState(false);
   const [addingMonth, setAddingMonth] = useState(false);
   const [editingMonthId, setEditingMonthId] = useState<string | null>(null);
@@ -241,7 +209,7 @@ export default function HeroCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      className="mb-4 rounded-3xl bg-surface-subtle p-6 md:p-8"
+      className="neu-card mb-4 p-6 md:p-8"
     >
       <div className="flex items-start justify-between gap-5">
         <div className="min-w-0 flex-1">
@@ -255,8 +223,9 @@ export default function HeroCard({
                 setAddingMonth(false);
                 setEditingMonthId(null);
                 setShowEntries(false);
+                setShowAllMonths(false);
               }}
-              className="h-8 rounded-full border border-line bg-white px-3 text-[12px] font-medium text-ink-secondary outline-none"
+              className="neu-input h-8 bg-surface-subtle px-3 text-[12px] font-medium text-ink-secondary"
               aria-label="Выбрать месяц продаж"
             >
               {salesPlan.months.map((month) => (
@@ -275,7 +244,7 @@ export default function HeroCard({
                 setEditingTarget(false);
                 setEditingMonthId(null);
               }}
-              className="inline-flex h-8 items-center gap-1 rounded-full bg-white px-3 text-[12px] font-medium text-ink-secondary transition hover:bg-surface"
+              className="neu-pill h-8 bg-surface-subtle px-3 text-[12px] font-medium text-ink-secondary hover:text-ink"
             >
               <Plus size={14} /> Создать план на месяц
             </button>
@@ -289,7 +258,7 @@ export default function HeroCard({
                 setAddingMonth(false);
                 setEditingMonthId(null);
               }}
-              className="rounded-lg p-1 text-ink-muted transition hover:bg-white hover:text-ink"
+              className="rounded-xl p-1.5 text-ink-muted transition hover:bg-surface-subtle hover:text-ink"
               aria-label="Редактировать план продаж"
             >
               <Pencil size={14} />
@@ -310,14 +279,14 @@ export default function HeroCard({
             <button
               type="button"
               onClick={() => setShowForm((value) => !value)}
-              className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white transition hover:bg-ink/90"
+              className="neu-pill bg-accent px-4 py-2 text-white shadow-none hover:brightness-105"
             >
               <Plus size={15} /> Добавить сумму
             </button>
             <button
               type="button"
               onClick={() => setShowEntries((value) => !value)}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[13px] font-medium text-ink-secondary"
+              className="neu-pill bg-surface-subtle px-4 py-2 text-ink-secondary hover:text-ink"
             >
               История ({currentEntries.length})
               {showEntries ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -330,15 +299,15 @@ export default function HeroCard({
           )}
         </div>
 
-        <div className="relative shrink-0">
+        <div className="neu-icon relative h-[88px] w-[88px] shrink-0 bg-white">
           <svg width="72" height="72" viewBox="0 0 72 72">
-            <circle cx="36" cy="36" r={RADIUS} fill="none" stroke="#ececec" strokeWidth="6" />
+            <circle cx="36" cy="36" r={RADIUS} fill="none" stroke="#e6e4f4" strokeWidth="6" />
             <motion.circle
               cx="36"
               cy="36"
               r={RADIUS}
               fill="none"
-              stroke="#5b55ef"
+              stroke="#6f5cf6"
               strokeWidth="6"
               strokeLinecap="round"
               strokeDasharray={CIRCUMFERENCE}
@@ -355,39 +324,53 @@ export default function HeroCard({
       </div>
 
       {addingMonth && (
-        <div className="mt-5 rounded-2xl bg-white p-4">
+        <div className="neu-flat mt-5 p-4">
           <div className="mb-4">
             <p className="text-[15px] font-semibold text-ink">Новый план продаж</p>
             <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">Выберите промежуток и цель. Старые месяцы останутся отдельно.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-[1fr_170px_170px_auto]">
-            <label className="grid gap-1 text-[12px] text-ink-muted">
+            <label className="grid gap-1.5 text-[12px] text-ink-muted">
               Цель на этот месяц, $
-              <input inputMode="decimal" value={newMonthTarget} onChange={(e) => setNewMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              <input inputMode="decimal" value={newMonthTarget} onChange={(e) => setNewMonthTarget(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
             </label>
-            <label className="grid gap-1 text-[12px] text-ink-muted">
+            <label className="grid gap-1.5 text-[12px] text-ink-muted">
               Начало периода
-              <input type="date" value={newMonthStartDate} onChange={(e) => setNewMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              <input type="date" value={newMonthStartDate} onChange={(e) => setNewMonthStartDate(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
             </label>
-            <label className="grid gap-1 text-[12px] text-ink-muted">
+            <label className="grid gap-1.5 text-[12px] text-ink-muted">
               Конец периода
-              <input type="date" value={newMonthEndDate} onChange={(e) => setNewMonthEndDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              <input type="date" value={newMonthEndDate} onChange={(e) => setNewMonthEndDate(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
             </label>
-            <button type="button" onClick={createMonth} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить план</button>
+            <button type="button" onClick={createMonth} className="neu-pill self-end bg-accent px-4 py-3 text-white shadow-none hover:brightness-105">Сохранить план</button>
           </div>
         </div>
       )}
 
-      <div className="mt-5 rounded-2xl bg-white p-4">
+      <div className="neu-flat mt-5 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-[13px] font-semibold text-ink">История месяцев</p>
-          <span className="text-[11px] text-ink-muted">{monthSummaries.length} периодов</span>
+          <p className="text-[13px] font-semibold text-ink">
+            {showAllMonths ? "Все периоды" : "Текущий период"}
+          </p>
+          {monthSummaries.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setShowAllMonths((value) => !value)}
+              className="neu-pill h-8 bg-white px-3 text-[11px] font-medium text-ink-secondary hover:text-ink"
+            >
+              {showAllMonths ? "Скрыть остальные" : `Показать все (${monthSummaries.length})`}
+              {showAllMonths ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          )}
         </div>
         <div className="grid gap-2">
-          {monthSummaries.map((month) => {
+          {(showAllMonths
+            ? monthSummaries
+            : monthSummaries.filter((month) => month.id === salesPlan.activeMonthId)
+          ).map((month) => {
             const selected = month.id === salesPlan.activeMonthId;
             return (
-              <div key={month.id} className={`flex flex-wrap items-center gap-3 rounded-2xl border px-3 py-3 ${selected ? "border-primary bg-primary/5" : "border-line bg-surface-subtle"}`}>
+              <div key={month.id} className={`flex flex-wrap items-center gap-3 rounded-2xl px-3 py-3 transition ${selected ? "bg-accent-soft" : "bg-white"}`}>
                 <button
                   type="button"
                   onClick={() => onSelectMonth(month.id)}
@@ -406,7 +389,7 @@ export default function HeroCard({
                   <button
                     type="button"
                     onClick={() => onDeleteMonth(month.id)}
-                    className="rounded-lg p-2 text-ink-muted transition hover:bg-white hover:text-danger"
+                    className="rounded-xl p-2 text-ink-muted transition hover:bg-danger-soft hover:text-danger"
                     aria-label="Удалить месяц"
                   >
                     <Trash2 size={15} />
@@ -415,7 +398,7 @@ export default function HeroCard({
                 <button
                   type="button"
                   onClick={() => beginMonthEdit(month.id)}
-                  className="rounded-lg p-2 text-ink-muted transition hover:bg-white hover:text-primary"
+                  className="rounded-xl p-2 text-ink-muted transition hover:bg-accent-soft hover:text-accent"
                   aria-label="Редактировать месяц"
                 >
                   <Pencil size={15} />
@@ -427,39 +410,39 @@ export default function HeroCard({
       </div>
 
       {editingMonthId && (
-        <div className="mt-5 rounded-2xl bg-white p-4">
+        <div className="neu-flat mt-5 p-4">
           <div className="mb-4">
             <p className="text-[15px] font-semibold text-ink">Редактировать месяц</p>
             <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">Измените цель или промежуток и нажмите Сохранить.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-[1fr_170px_170px_auto]">
-            <label className="grid gap-1 text-[12px] text-ink-muted">
+            <label className="grid gap-1.5 text-[12px] text-ink-muted">
               Цель на этот месяц, $
-              <input inputMode="decimal" value={editMonthTarget} onChange={(e) => setEditMonthTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              <input inputMode="decimal" value={editMonthTarget} onChange={(e) => setEditMonthTarget(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
             </label>
-            <label className="grid gap-1 text-[12px] text-ink-muted">
+            <label className="grid gap-1.5 text-[12px] text-ink-muted">
               Начало периода
-              <input type="date" value={editMonthStartDate} onChange={(e) => setEditMonthStartDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              <input type="date" value={editMonthStartDate} onChange={(e) => setEditMonthStartDate(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
             </label>
-            <label className="grid gap-1 text-[12px] text-ink-muted">
+            <label className="grid gap-1.5 text-[12px] text-ink-muted">
               Конец периода
-              <input type="date" value={editMonthEndDate} onChange={(e) => setEditMonthEndDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+              <input type="date" value={editMonthEndDate} onChange={(e) => setEditMonthEndDate(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
             </label>
             <div className="flex gap-2 self-end">
-              <button type="button" onClick={saveMonthEdit} className="rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить</button>
-              <button type="button" onClick={() => setEditingMonthId(null)} className="rounded-xl bg-surface-subtle px-4 py-3 text-[13px] font-medium text-ink-secondary">Отмена</button>
+              <button type="button" onClick={saveMonthEdit} className="neu-pill bg-accent px-4 py-3 text-white shadow-none hover:brightness-105">Сохранить</button>
+              <button type="button" onClick={() => setEditingMonthId(null)} className="neu-pill bg-surface-subtle px-4 py-3 text-ink-secondary shadow-none">Отмена</button>
             </div>
           </div>
         </div>
       )}
 
       {editingTarget && (
-        <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_180px_auto]">
-          <label className="grid gap-1 text-[12px] text-ink-muted">
+        <div className="neu-flat mt-5 grid gap-3 p-4 md:grid-cols-[1fr_150px_180px_auto]">
+          <label className="grid gap-1.5 text-[12px] text-ink-muted">
             Плановая сумма, $
-            <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
           </label>
-          <label className="grid gap-1 text-[12px] text-ink-muted">
+          <label className="grid gap-1.5 text-[12px] text-ink-muted">
             Старт месяца
             <input
               type="number"
@@ -471,47 +454,47 @@ export default function HeroCard({
                 const nextStartDay = clampMonthStartDay(Number(e.target.value));
                 setDeadline(salesPeriodFor(localDate(), nextStartDay).end);
               }}
-              className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none"
+              className="neu-input h-10 bg-white text-[14px]"
             />
           </label>
-          <label className="grid gap-1 text-[12px] text-ink-muted">
+          <label className="grid gap-1.5 text-[12px] text-ink-muted">
             Дедлайн
-            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
           </label>
-          <button type="button" onClick={saveTarget} className="self-end rounded-xl bg-primary px-4 py-3 text-[13px] font-medium text-white">Сохранить</button>
+          <button type="button" onClick={saveTarget} className="neu-pill self-end bg-accent px-4 py-3 text-white shadow-none hover:brightness-105">Сохранить</button>
         </div>
       )}
 
       {showForm && (
-        <div className="mt-5 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[1fr_150px_170px_auto]">
-          <label className="grid gap-1 text-[12px] text-ink-muted">
+        <div className="neu-flat mt-5 grid gap-3 p-4 md:grid-cols-[1fr_150px_170px_auto]">
+          <label className="grid gap-1.5 text-[12px] text-ink-muted">
             Откуда поступила сумма
-            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Например: Нурали - VIP тариф" className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Например: Нурали - VIP тариф" className="neu-input h-10 bg-white text-[14px]" />
           </label>
-          <label className="grid gap-1 text-[12px] text-ink-muted">
+          <label className="grid gap-1.5 text-[12px] text-ink-muted">
             Сумма, $
-            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="4000" className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="4000" className="neu-input h-10 bg-white text-[14px]" />
           </label>
-          <label className="grid gap-1 text-[12px] text-ink-muted">
+          <label className="grid gap-1.5 text-[12px] text-ink-muted">
             Дата поступления
-            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[14px] text-ink outline-none" />
+            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="neu-input h-10 bg-white text-[14px]" />
           </label>
-          <button type="button" onClick={submitEntry} className="self-end rounded-xl bg-success px-4 py-3 text-[13px] font-medium text-white">Добавить</button>
+          <button type="button" onClick={submitEntry} className="neu-pill self-end bg-success px-4 py-3 text-white shadow-none hover:brightness-105">Добавить</button>
         </div>
       )}
 
       {showEntries && (
-        <div className="mt-5 overflow-hidden rounded-2xl bg-white">
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <div className="neu-flat mt-5 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3">
             <p className="text-[12px] font-medium text-ink-secondary">История поступлений</p>
             <span className="text-[11px] text-ink-muted">По дате - сначала новые</span>
           </div>
-          <div className="divide-y divide-line px-4">
+          <div className="flex flex-col gap-2 px-4 pb-4">
             {entriesByDate.length === 0 && <p className="py-5 text-center text-[13px] text-ink-muted">Поступлений пока нет</p>}
             {entriesByDate.map((entry) => {
               const editing = editingEntryId === entry.id;
               return (
-                <div key={entry.id} className="py-3">
+                <div key={entry.id} className="rounded-2xl bg-white px-3 py-3">
                   {!editing ? (
                     <div className="flex items-center gap-3">
                       <div className="min-w-0 flex-1">
@@ -519,14 +502,14 @@ export default function HeroCard({
                         <p className="mt-0.5 text-[11px] text-ink-muted">{formatDate(entry.normalizedDate)}</p>
                       </div>
                       <strong className="text-[14px] text-success">+{money(entry.amount)}</strong>
-                      <button type="button" onClick={() => beginEdit(entry)} className="rounded-lg p-2 text-ink-muted hover:bg-surface-subtle hover:text-primary" aria-label="Редактировать поступление"><Pencil size={15} /></button>
-                      <button type="button" onClick={() => onDeleteEntry(entry.id)} className="rounded-lg p-2 text-ink-muted hover:bg-surface-subtle hover:text-danger" aria-label="Удалить поступление"><Trash2 size={15} /></button>
+                      <button type="button" onClick={() => beginEdit(entry)} className="rounded-xl p-2 text-ink-muted hover:bg-accent-soft hover:text-accent" aria-label="Редактировать поступление"><Pencil size={15} /></button>
+                      <button type="button" onClick={() => onDeleteEntry(entry.id)} className="rounded-xl p-2 text-ink-muted hover:bg-danger-soft hover:text-danger" aria-label="Удалить поступление"><Trash2 size={15} /></button>
                     </div>
                   ) : (
                     <div className="grid gap-2 md:grid-cols-[1fr_140px_170px_auto]">
-                      <input value={editSource} onChange={(e) => setEditSource(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[13px] outline-none" aria-label="Источник поступления" />
-                      <input inputMode="decimal" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[13px] outline-none" aria-label="Сумма поступления" />
-                      <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-10 rounded-xl border border-line px-3 text-[13px] outline-none" aria-label="Дата поступления" />
+                      <input value={editSource} onChange={(e) => setEditSource(e.target.value)} className="neu-input h-10 bg-surface-subtle text-[13px]" aria-label="Источник поступления" />
+                      <input inputMode="decimal" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="neu-input h-10 bg-surface-subtle text-[13px]" aria-label="Сумма поступления" />
+                      <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="neu-input h-10 bg-surface-subtle text-[13px]" aria-label="Дата поступления" />
                       <div className="flex gap-1">
                         <button type="button" onClick={saveEntry} className="flex h-10 w-10 items-center justify-center rounded-xl bg-success text-white" aria-label="Сохранить"><Check size={16} /></button>
                         <button type="button" onClick={() => setEditingEntryId(null)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-subtle text-ink-muted" aria-label="Отмена"><X size={16} /></button>

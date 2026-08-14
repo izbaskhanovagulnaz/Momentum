@@ -17,29 +17,19 @@ import {
 import TopBar from "../components/TopBar";
 import { usePlanner } from "../PlannerContext";
 import type { Task } from "../types";
+import { localDate } from "../utils";
 
 type Filter = "all" | "open" | "done" | "today" | "urgent" | "overdue" | "week";
 type Priority = NonNullable<Task["priority"]>;
 
-function todayValue() {
-  const now = new Date();
-  const offset = now.getTimezoneOffset();
-  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
-
 function weekBounds() {
-  const now = new Date(`${todayValue()}T12:00:00`);
+  const now = new Date(`${localDate()}T12:00:00`);
   const mondayOffset = (now.getDay() + 6) % 7;
   const start = new Date(now);
   start.setDate(now.getDate() - mondayOffset);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  return { start: todayValueFromDate(start), end: todayValueFromDate(end) };
-}
-
-function todayValueFromDate(date: Date) {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+  return { start: localDate(start), end: localDate(end) };
 }
 
 const priorityMeta: Record<Priority, { label: string; className: string }> = {
@@ -53,14 +43,14 @@ export default function Tasks() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(todayValue());
+  const [date, setDate] = useState(localDate());
   const [time, setTime] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
   const [editing, setEditing] = useState<Task | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
 
   const stats = useMemo(() => {
-    const today = todayValue();
+    const today = localDate();
     const { start, end } = weekBounds();
     const done = tasks.filter((task) => task.done).length;
     const urgent = tasks.filter((task) => !task.done && task.priority === "high").length;
@@ -74,7 +64,7 @@ export default function Tasks() {
     const normalized = query.trim().toLowerCase();
     return tasks
       .filter((task) => {
-        const today = todayValue();
+        const today = localDate();
         const { start, end } = weekBounds();
         if (filter === "open" && task.done) return false;
         if (filter === "done" && !task.done) return false;

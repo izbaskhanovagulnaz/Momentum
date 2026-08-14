@@ -1,41 +1,62 @@
 import { NavLink } from "react-router-dom";
-import { Home, Calendar, CheckSquare, Target, StickyNote, Settings, Wallet } from "lucide-react";
+import {
+  Calendar,
+  CheckSquare,
+  Home,
+  Settings,
+  StickyNote,
+  Target,
+  Wallet,
+} from "lucide-react";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Главная", icon: Home, end: true },
-  { to: "/calendar", label: "Календарь", icon: Calendar, end: false },
-  { to: "/tasks", label: "Задачи", icon: CheckSquare, end: false },
-  { to: "/goals", label: "Цели", icon: Target, end: false },
-  { to: "/finance", label: "Финансы", icon: Wallet, end: false },
-  { to: "/notes", label: "Заметки", icon: StickyNote, end: false },
+  { to: "/", label: "Главная", icon: Home, end: true, tint: "bg-accent-soft text-accent" },
+  { to: "/calendar", label: "Календарь", icon: Calendar, end: false, tint: "bg-sky-soft text-sky" },
+  { to: "/tasks", label: "Задачи", icon: CheckSquare, end: false, tint: "bg-mint-soft text-mint" },
+  { to: "/goals", label: "Цели", icon: Target, end: false, tint: "bg-peach-soft text-peach" },
+  { to: "/finance", label: "Финансы", icon: Wallet, end: false, tint: "bg-success-soft text-success" },
+  { to: "/notes", label: "Заметки", icon: StickyNote, end: false, tint: "bg-warning-soft text-warning" },
 ];
 
 export default function Sidebar() {
   return (
-    <aside className="hidden shrink-0 flex-col border-r border-line px-4 py-8 md:flex md:w-60">
-      <div className="mb-10 flex items-center gap-2 px-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-ink text-sm font-semibold text-white">
+    <aside className="sticky top-0 hidden h-screen shrink-0 flex-col gap-6 px-4 py-6 md:flex md:w-[236px]">
+      <div className="neu-card-sm flex items-center gap-3 px-3 py-3">
+        <div className="neu-icon h-10 w-10 bg-accent-soft text-[16px] font-bold text-accent">
           M
         </div>
-        <span className="text-[15px] font-semibold tracking-tight">Momentum</span>
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-semibold text-ink">Momentum</p>
+          <p className="text-[11px] text-ink-muted">Personal OS</p>
+        </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+      <nav className="neu-flat flex flex-1 flex-col gap-1.5 p-3">
+        {NAV_ITEMS.map(({ to, label, icon: Icon, end, tint }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors ${
+              `group flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition ${
                 isActive
-                  ? "bg-surface-subtle font-medium text-ink"
-                  : "text-ink-secondary hover:bg-surface-subtle hover:text-ink"
+                  ? "neu-card-sm font-semibold text-ink"
+                  : "text-ink-secondary hover:bg-white/60 hover:text-ink"
               }`
             }
           >
-            <Icon size={18} strokeWidth={1.8} />
-            {label}
+            {({ isActive }) => (
+              <>
+                <span
+                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl transition ${
+                    isActive ? tint : "bg-transparent text-ink-muted group-hover:text-ink"
+                  }`}
+                >
+                  <Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} />
+                </span>
+                <span className="truncate">{label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -43,15 +64,23 @@ export default function Sidebar() {
       <NavLink
         to="/settings"
         className={({ isActive }) =>
-          `flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors ${
-            isActive
-              ? "bg-surface-subtle font-medium text-ink"
-              : "text-ink-secondary hover:bg-surface-subtle hover:text-ink"
+          `neu-card-sm flex h-12 items-center gap-3 rounded-3xl px-3 text-[14px] transition ${
+            isActive ? "font-semibold text-ink" : "text-ink-secondary hover:text-ink"
           }`
         }
       >
-        <Settings size={18} strokeWidth={1.8} />
-        Настройки
+        {({ isActive }) => (
+          <>
+            <span
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${
+                isActive ? "bg-accent-soft text-accent" : "text-ink-muted"
+              }`}
+            >
+              <Settings size={17} strokeWidth={isActive ? 2.25 : 1.75} />
+            </span>
+            <span>Настройки</span>
+          </>
+        )}
       </NavLink>
     </aside>
   );

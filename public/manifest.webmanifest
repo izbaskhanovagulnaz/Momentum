@@ -1,6 +1,7 @@
 {
   "name": "Momentum — личный планировщик",
   "short_name": "Momentum",
+  "lang": "ru",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

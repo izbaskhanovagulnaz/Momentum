@@ -10,73 +10,91 @@ body,
   height: 100%;
 }
 
-body {
-  @apply bg-white text-ink font-sans antialiased;
-}
-
 :root {
   color-scheme: light;
+  --bg-app: #eef0fa;
+  --bg-app-2: #f7eefc;
+  --shadow-neu: 10px 10px 24px rgba(163, 168, 200, 0.35), -10px -10px 22px rgba(255, 255, 255, 0.85);
+  --shadow-neu-sm: 6px 6px 14px rgba(163, 168, 200, 0.3), -6px -6px 12px rgba(255, 255, 255, 0.8);
+  --shadow-neu-inset: inset 4px 4px 10px rgba(163, 168, 200, 0.28), inset -4px -4px 10px rgba(255, 255, 255, 0.75);
+  --shadow-neu-pressed: inset 3px 3px 8px rgba(163, 168, 200, 0.35), inset -3px -3px 8px rgba(255, 255, 255, 0.6);
+}
+
+body {
+  @apply text-ink font-sans antialiased;
+  background: radial-gradient(circle at 12% -10%, var(--bg-app-2), transparent 55%), var(--bg-app);
+  background-attachment: fixed;
+  font-feature-settings: "cv02", "cv03", "cv04", "tnum";
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --bg-app: #171625;
+  --bg-app-2: #1e1a30;
+  --shadow-neu: 10px 10px 24px rgba(0, 0, 0, 0.55), -10px -10px 22px rgba(255, 255, 255, 0.03);
+  --shadow-neu-sm: 6px 6px 14px rgba(0, 0, 0, 0.5), -6px -6px 12px rgba(255, 255, 255, 0.025);
+  --shadow-neu-inset: inset 4px 4px 10px rgba(0, 0, 0, 0.5), inset -4px -4px 10px rgba(255, 255, 255, 0.02);
+  --shadow-neu-pressed: inset 3px 3px 8px rgba(0, 0, 0, 0.55), inset -3px -3px 8px rgba(255, 255, 255, 0.02);
 }
 
-:root[data-theme="dark"] body,
-:root[data-theme="dark"] .bg-white {
-  background-color: #111317;
-}
-
-:root[data-theme="dark"] .bg-surface-subtle,
+:root[data-theme="dark"] .bg-white,
 :root[data-theme="dark"] .bg-surface {
-  background-color: #181b21;
+  background-color: #211d33;
+}
+
+:root[data-theme="dark"] .bg-surface-subtle {
+  background-color: #1c1929;
 }
 
 :root[data-theme="dark"] .bg-accent-soft {
-  background-color: rgba(93, 126, 255, 0.16);
+  background-color: rgba(111, 92, 246, 0.18);
 }
 
 :root[data-theme="dark"] .bg-success-soft {
-  background-color: rgba(29, 185, 129, 0.16);
+  background-color: rgba(34, 197, 139, 0.16);
 }
 
 :root[data-theme="dark"] .bg-danger-soft {
-  background-color: rgba(239, 68, 68, 0.16);
+  background-color: rgba(244, 104, 95, 0.16);
 }
 
 :root[data-theme="dark"] .text-ink {
-  color: #f4f6fb;
+  color: #f3f1ff;
 }
 
 :root[data-theme="dark"] .text-ink-secondary {
-  color: #b9bfca;
+  color: #c2bfe0;
 }
 
 :root[data-theme="dark"] .text-ink-muted {
-  color: #858d9b;
+  color: #8b87ab;
 }
 
 :root[data-theme="dark"] .border-line,
 :root[data-theme="dark"] .border-line-strong,
 :root[data-theme="dark"] .divide-line > :not([hidden]) ~ :not([hidden]),
 :root[data-theme="dark"] .divide-line-strong > :not([hidden]) ~ :not([hidden]) {
-  border-color: #2a2f38;
+  border-color: #322c4a;
 }
 
 :root[data-theme="dark"] input,
 :root[data-theme="dark"] textarea,
 :root[data-theme="dark"] select {
-  background-color: #151820;
-  color: #f4f6fb;
+  background-color: #1c1929;
+  color: #f3f1ff;
 }
 
 :root[data-theme="dark"] input::placeholder,
 :root[data-theme="dark"] textarea::placeholder {
-  color: #697282;
+  color: #6f6b90;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(91, 85, 239, 0.16);
 }
 
 .safe-bottom {
@@ -90,22 +108,53 @@ body {
 
 @layer components {
   .card-surface {
-    @apply border border-line-strong shadow-sm;
-  }
-}
-
-@media (min-width: 768px) {
-  .rounded-3xl.bg-surface-subtle,
-  .rounded-3xl.bg-white,
-  .rounded-3xl.bg-accent-soft {
-    border: 1px solid #e0e0e0;
-    box-shadow: 0 1px 2px rgba(17, 17, 19, 0.04);
+    @apply border border-line bg-white shadow-sm;
   }
 
-  :root[data-theme="dark"] .rounded-3xl.bg-surface-subtle,
-  :root[data-theme="dark"] .rounded-3xl.bg-white,
-  :root[data-theme="dark"] .rounded-3xl.bg-accent-soft {
-    border-color: #2a2f38;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  .soft-panel {
+    @apply rounded-lg border border-line bg-white;
+  }
+
+  .quiet-button {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-medium transition;
+  }
+
+  /* Soft UI / neumorphism-lite primitives */
+  .neu-card {
+    @apply rounded-4xl bg-white;
+    box-shadow: var(--shadow-neu);
+  }
+
+  .neu-card-sm {
+    @apply rounded-3xl bg-white;
+    box-shadow: var(--shadow-neu-sm);
+  }
+
+  .neu-flat {
+    @apply rounded-3xl bg-surface-subtle;
+    box-shadow: var(--shadow-neu-inset);
+  }
+
+  .neu-pill {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 text-[13px] font-medium transition active:scale-[0.98];
+    box-shadow: var(--shadow-neu-sm);
+  }
+
+  .neu-pill:active {
+    box-shadow: var(--shadow-neu-pressed);
+  }
+
+  .neu-icon {
+    @apply grid shrink-0 place-items-center rounded-2xl;
+    box-shadow: var(--shadow-neu-sm);
+  }
+
+  .neu-input {
+    @apply rounded-2xl border-0 bg-surface-subtle px-4 text-[15px] text-ink outline-none transition;
+    box-shadow: var(--shadow-neu-inset);
+  }
+
+  .neu-input:focus {
+    box-shadow: var(--shadow-neu-inset), 0 0 0 2px theme("colors.accent.DEFAULT");
   }
 }

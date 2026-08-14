@@ -14,6 +14,8 @@ export default function PwaUpdatePrompt() {
   const [updating, setUpdating] = useState(false);
   const [hidden, setHidden] = useState(false);
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const latestServerVersionRef = useRef<string | null>(null);
+  const applyingVersionRef = useRef<string | null>(null);
   const reloading = useRef(false);
 
   useEffect(() => {
@@ -38,11 +40,20 @@ export default function PwaUpdatePrompt() {
         const payload = (await response.json()) as VersionPayload;
         const serverVersion = String(payload.version || "").trim();
         if (!serverVersion) return;
+        latestServerVersionRef.current = serverVersion;
 
         const appliedVersion = localStorage.getItem(STORAGE_KEY);
-        if (!appliedVersion || appliedVersion !== serverVersion) {
-          reveal(serverVersion);
+        if (!appliedVersion) {
+          localStorage.setItem(STORAGE_KEY, serverVersion);
+          return;
         }
+
+        if (appliedVersion !== serverVersion) {
+          reveal(serverVersion);
+          return;
+        }
+
+        setAvailableVersion(null);
       } catch {
         // Offline or temporary network failure: keep the app usable.
       }
@@ -51,7 +62,7 @@ export default function PwaUpdatePrompt() {
     const showWaitingWorker = (registration: ServiceWorkerRegistration) => {
       if (registration.waiting && navigator.serviceWorker.controller) {
         setWaitingWorker(registration.waiting);
-        reveal();
+        reveal(latestServerVersionRef.current);
       }
     };
 
@@ -91,6 +102,9 @@ export default function PwaUpdatePrompt() {
     const onControllerChange = () => {
       if (reloading.current) return;
       reloading.current = true;
+      if (applyingVersionRef.current) {
+        localStorage.setItem(STORAGE_KEY, applyingVersionRef.current);
+      }
       window.location.reload();
     };
 
@@ -122,16 +136,13 @@ export default function PwaUpdatePrompt() {
   const applyUpdate = async () => {
     setUpdating(true);
 
-    if (availableVersion) {
-      localStorage.setItem(STORAGE_KEY, availableVersion);
-    }
-
     try {
       const registration = registrationRef.current;
       await registration?.update();
 
       const worker = registration?.waiting || waitingWorker;
       if (worker) {
+        applyingVersionRef.current = availableVersion || latestServerVersionRef.current;
         worker.postMessage({ type: "SKIP_WAITING" });
         return;
       }
@@ -139,6 +150,11 @@ export default function PwaUpdatePrompt() {
       if ("caches" in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((key) => caches.delete(key)));
+      }
+
+      const appliedVersion = availableVersion || latestServerVersionRef.current;
+      if (appliedVersion) {
+        localStorage.setItem(STORAGE_KEY, appliedVersion);
       }
 
       const url = new URL(window.location.href);

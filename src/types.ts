@@ -108,6 +108,7 @@ export interface SalesPlan {
 }
 
 export type Currency = "USD" | "UZS" | "RUB";
+export type FinanceOperationStatus = "planned" | "completed" | "cancelled";
 
 export interface FinanceIncome {
   id: string;
@@ -119,6 +120,8 @@ export interface FinanceIncome {
   savingsPercent: number;
   savingsAmount: number;
   fromSavingsAmount: number;
+  status?: FinanceOperationStatus;
+  probability?: number;
 }
 
 export interface FinanceExpense {
@@ -128,6 +131,8 @@ export interface FinanceExpense {
   date: string;
   category: string;
   note: string;
+  title?: string;
+  status?: FinanceOperationStatus;
 }
 
 export interface PlannedExpense {

@@ -17,18 +17,27 @@ interface FirebaseCompat {
   }) & { GoogleAuthProvider: new () => { setCustomParameters: (params: Record<string, string>) => void } };
   firestore: (() => {
     collection: (name: string) => {
-      doc: (id: string) => {
-        collection: (name: string) => {
-          doc: (id: string) => FirebaseDocumentRef;
-        };
-      };
+      doc: (id: string) => FirebaseDocumentRef;
     };
   }) & { FieldValue: { serverTimestamp: () => unknown } };
 }
 
 interface FirebaseDocumentSnapshot {
+  id?: string;
   exists: boolean;
   data: () => Record<string, unknown> | undefined;
+}
+
+export interface FirebaseQuerySnapshot {
+  docs: FirebaseDocumentSnapshot[];
+}
+
+export interface FirebaseCollectionRef {
+  doc: (id: string) => FirebaseDocumentRef;
+  onSnapshot: (
+    success: (snapshot: FirebaseQuerySnapshot) => void,
+    failure?: (error: unknown) => void,
+  ) => () => void;
 }
 
 export interface FirebaseDocumentRef {
@@ -36,7 +45,10 @@ export interface FirebaseDocumentRef {
     success: (snapshot: FirebaseDocumentSnapshot) => void,
     failure?: (error: unknown) => void,
   ) => () => void;
+  get: () => Promise<FirebaseDocumentSnapshot>;
   set: (data: Record<string, unknown>, options?: { merge: boolean }) => Promise<void>;
+  delete: () => Promise<void>;
+  collection: (name: string) => FirebaseCollectionRef;
 }
 
 declare global {

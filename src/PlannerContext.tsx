@@ -5,6 +5,7 @@ import type {
   DebtItem,
   FinanceExpense,
   FinanceIncome,
+  FinanceOperationStatus,
   FinanceState,
   Goal,
   GoalCreateInput,
@@ -18,8 +19,9 @@ import type {
 } from "./types";
 import { normalizeGoal, recalculateGoal } from "./goalUtils";
 import { firestore, serverTimestamp } from "./firebase";
-import type { FirebaseDocumentRef } from "./firebase";
+import type { FirebaseCollectionRef, FirebaseDocumentRef } from "./firebase";
 import { useAuth } from "./AuthContext";
+import { clampMonthStartDay, localDate, salesPeriodFor } from "./utils";
 
 interface PlannerContextValue {
   tasks: Task[];
@@ -44,10 +46,13 @@ interface PlannerContextValue {
   updateSaleEntry: (id: string, source: string, amount: number, date: string) => void;
   deleteSaleEntry: (id: string) => void;
   addFinanceIncome: (input: Omit<FinanceIncome, "id" | "savingsAmount">) => void;
+  updateFinanceIncome: (id: string, input: Partial<Omit<FinanceIncome, "id" | "savingsAmount">>) => void;
   deleteFinanceIncome: (id: string) => void;
   addFinanceExpense: (input: Omit<FinanceExpense, "id">) => void;
+  updateFinanceExpense: (id: string, input: Partial<Omit<FinanceExpense, "id">>) => void;
   deleteFinanceExpense: (id: string) => void;
   addPlannedExpense: (input: Omit<PlannedExpense, "id">) => void;
+  updatePlannedExpense: (id: string, input: Omit<PlannedExpense, "id">) => void;
   updatePlannedExpenseStatus: (id: string, status: PlannedExpense["status"]) => void;
   deletePlannedExpense: (id: string) => void;
   addDebt: (input: Omit<DebtItem, "id" | "status">) => void;
@@ -87,24 +92,30 @@ interface PlannerContextValue {
 
 interface PlannerDocument {
   tasks: Task[];
+  tasksMigrated?: boolean;
   notes: NoteItem[];
   salesPlan: SalesPlan;
   finance: FinanceState;
   goals: Goal[];
 }
 
-function localDate(date = new Date()) {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+const telegramReminderWorkerUrl = "https://momentum-reminders.izbaskhanovagulnaz.workers.dev/?newTasks=1";
+
+function notifyTelegramAboutNewTask() {
+  void fetch(telegramReminderWorkerUrl, {
+    method: "GET",
+    mode: "no-cors",
+    keepalive: true,
+  }).catch((reason) => {
+    console.warn("Telegram reminder check failed", reason);
+  });
 }
 
-const today = localDate();
-
 const initialTasks: Task[] = [
-  { id: "1", title: "Тёплые лиды — follow up", done: false, priority: "high", date: today },
-  { id: "2", title: "Demo для клиента", done: false, time: "11:00", date: today },
-  { id: "3", title: "Запрос на оплату", done: true, date: today },
-  { id: "4", title: "Отчёт по воронке", done: false, time: "17:00", date: today },
+  { id: "1", title: "Тёплые лиды — follow up", done: false, priority: "high", date: localDate() },
+  { id: "2", title: "Demo для клиента", done: false, time: "11:00", date: localDate() },
+  { id: "3", title: "Запрос на оплату", done: true, date: localDate() },
+  { id: "4", title: "Отчёт по воронке", done: false, time: "17:00", date: localDate() },
 ];
 
 const initialNotes: NoteItem[] = [
@@ -116,21 +127,21 @@ const initialSalesPlan: SalesPlan = {
   activeMonthId: "sales-month-current",
   months: [{
     id: "sales-month-current",
-    label: new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(new Date(`${today}T12:00:00`)),
-    startDate: today,
+    label: new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(new Date(`${localDate()}T12:00:00`)),
+    startDate: localDate(),
     targetAmount: 25_000,
-    deadline: today,
+    deadline: localDate(),
     monthStartDay: 1,
     entries: [
-      { id: "sale-1", source: "Основные продажи", amount: 16_800, date: today },
+      { id: "sale-1", source: "Основные продажи", amount: 16_800, date: localDate() },
     ],
   }],
-  startDate: today,
+  startDate: localDate(),
   targetAmount: 25_000,
-  deadline: today,
+  deadline: localDate(),
   monthStartDay: 1,
   entries: [
-    { id: "sale-1", source: "Основные продажи", amount: 16_800, date: today },
+    { id: "sale-1", source: "Основные продажи", amount: 16_800, date: localDate() },
   ],
 };
 
@@ -153,7 +164,7 @@ const initialGoals: Goal[] = [
     currentValue: 16_800,
     targetValue: 25_000,
     unit: "$",
-    deadline: today,
+    deadline: localDate(),
     imageDataUrl: "",
     createdAt: new Date().toISOString(),
     entries: [],
@@ -161,36 +172,6 @@ const initialGoals: Goal[] = [
     gallery: [],
   }),
 ];
-
-function clampMonthStartDay(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 1;
-  return Math.min(28, Math.max(1, Math.round(numeric)));
-}
-
-function localDateFromDate(date: Date) {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
-
-function salesPeriodFor(dateValueString: string, startDay: number) {
-  const anchor = new Date(`${dateValueString}T12:00:00`);
-  const safeStartDay = clampMonthStartDay(startDay);
-  const start = new Date(anchor.getFullYear(), anchor.getMonth(), safeStartDay, 12);
-
-  if (anchor.getDate() < safeStartDay) {
-    start.setMonth(start.getMonth() - 1);
-  }
-
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
-  end.setDate(end.getDate() - 1);
-
-  return {
-    start: localDateFromDate(start),
-    end: localDateFromDate(end),
-  };
-}
 
 function monthLabel(startDate: string, endDate: string) {
   const start = new Date(`${startDate}T12:00:00`);
@@ -208,7 +189,7 @@ function monthLabel(startDate: string, endDate: string) {
 
 function normalizeSalesMonth(raw: Partial<SalesMonthPlan> & Record<string, unknown>, fallbackId: string): SalesMonthPlan {
   const monthStartDay = clampMonthStartDay(raw.monthStartDay);
-  const deadline = typeof raw.deadline === "string" && raw.deadline ? raw.deadline : salesPeriodFor(today, monthStartDay).end;
+  const deadline = typeof raw.deadline === "string" && raw.deadline ? raw.deadline : salesPeriodFor(localDate(), monthStartDay).end;
   const startDate = typeof raw.startDate === "string" && raw.startDate ? raw.startDate : salesPeriodFor(deadline, monthStartDay).start;
 
   return {
@@ -255,9 +236,24 @@ function normalizeSalesPlan(raw: Partial<SalesPlan> & Record<string, unknown>): 
 
 function normalizeFinance(raw: Partial<FinanceState> & Record<string, unknown>): FinanceState {
   const rates = raw.rates && typeof raw.rates === "object" ? raw.rates as Partial<Record<Currency, number>> : {};
+  const normalizeStatus = (status: unknown, date: unknown): FinanceOperationStatus => {
+    if (status === "planned" || status === "completed" || status === "cancelled") return status;
+    return typeof date === "string" && date > localDate() ? "planned" : "completed";
+  };
   return {
-    incomes: Array.isArray(raw.incomes) ? raw.incomes : [],
-    expenses: Array.isArray(raw.expenses) ? raw.expenses : [],
+    incomes: Array.isArray(raw.incomes)
+      ? raw.incomes.map((income) => ({
+          ...(income as FinanceIncome),
+          status: normalizeStatus((income as Partial<FinanceIncome>).status, (income as Partial<FinanceIncome>).date),
+          probability: Number((income as Partial<FinanceIncome>).probability) || 100,
+        }))
+      : [],
+    expenses: Array.isArray(raw.expenses)
+      ? raw.expenses.map((expense) => ({
+          ...(expense as FinanceExpense),
+          status: normalizeStatus((expense as Partial<FinanceExpense>).status, (expense as Partial<FinanceExpense>).date),
+        }))
+      : [],
     plannedExpenses: Array.isArray(raw.plannedExpenses) ? raw.plannedExpenses : [],
     debts: Array.isArray(raw.debts) ? raw.debts : [],
     rates: {
@@ -266,6 +262,31 @@ function normalizeFinance(raw: Partial<FinanceState> & Record<string, unknown>):
       RUB: Number(rates.RUB) || initialFinance.rates.RUB,
     },
   };
+}
+
+function normalizeTask(raw: Partial<Task> & Record<string, unknown>, fallbackIndex: number): Task {
+  const rawTime = typeof raw.time === "string" ? raw.time.trim() : "";
+  const normalizedTime = /^\d{4}$/.test(rawTime)
+    ? `${rawTime.slice(0, 2)}:${rawTime.slice(2)}`
+    : rawTime;
+  const priority = raw.priority === "high" || raw.priority === "normal" || raw.priority === "low"
+    ? raw.priority
+    : "normal";
+
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : String(raw.id || `legacy-task-${fallbackIndex}`),
+    title: typeof raw.title === "string" ? raw.title : "",
+    done: Boolean(raw.done),
+    date: typeof raw.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : localDate(),
+    time: /^\d{2}:\d{2}$/.test(normalizedTime) ? normalizedTime : undefined,
+    priority,
+  };
+}
+
+function normalizeTasks(raw: unknown): Task[] {
+  return Array.isArray(raw)
+    ? raw.map((task, index) => normalizeTask(task as Partial<Task> & Record<string, unknown>, index))
+    : [];
 }
 
 const PlannerContext = createContext<PlannerContextValue | null>(null);
@@ -286,6 +307,8 @@ export function PlannerProvider({ children }: PropsWithChildren) {
   const financeRef = useRef<FinanceState>(initialFinance);
   const goalsRef = useRef<Goal[]>([]);
   const plannerRef = useRef<FirebaseDocumentRef | null>(null);
+  const tasksCollectionRef = useRef<FirebaseCollectionRef | null>(null);
+  const userRef = useRef<FirebaseDocumentRef | null>(null);
   const pendingWritesRef = useRef(0);
 
   const applyTasks = (next: Task[]) => {
@@ -313,28 +336,38 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     setGoals(next);
   };
 
-  const persist = async (
-    nextTasks: Task[],
-    nextNotes: NoteItem[],
-    nextSalesPlan: SalesPlan,
-    nextGoals = goalsRef.current,
-    nextFinance = financeRef.current,
+  const persistField = async <K extends "notes" | "salesPlan" | "finance" | "goals">(
+    field: K,
+    value: PlannerDocument[K],
   ) => {
     const ref = plannerRef.current;
+    const rootRef = userRef.current;
     if (!ref) return;
 
     pendingWritesRef.current += 1;
     setSyncStatus("saving");
 
     try {
-      await ref.set({
-        tasks: nextTasks,
-        notes: nextNotes,
-        salesPlan: nextSalesPlan,
-        finance: nextFinance,
-        goals: nextGoals,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      await ref.set({ [field]: value, updatedAt: serverTimestamp() }, { merge: true });
+      await rootRef?.set({ planner: { [field]: value }, updatedAt: serverTimestamp() }, { merge: true });
+      setSyncStatus("synced");
+    } catch (reason) {
+      console.error(reason);
+      setSyncStatus("error");
+    } finally {
+      pendingWritesRef.current = Math.max(0, pendingWritesRef.current - 1);
+    }
+  };
+
+  const persistTask = async (task: Task | null, id: string) => {
+    const collection = tasksCollectionRef.current;
+    if (!collection) return;
+    pendingWritesRef.current += 1;
+    setSyncStatus("saving");
+    try {
+      const ref = collection.doc(id);
+      if (task) await ref.set({ ...task, updatedAt: serverTimestamp() }, { merge: true });
+      else await ref.delete();
       setSyncStatus("synced");
     } catch (reason) {
       console.error(reason);
@@ -349,6 +382,8 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     setSyncStatus("loading");
     pendingWritesRef.current = 0;
     plannerRef.current = null;
+    tasksCollectionRef.current = null;
+    userRef.current = null;
 
     if (!user) {
       applyTasks([]);
@@ -360,43 +395,81 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    const ref = firestore.collection("users").doc(user.uid).collection("planner").doc("main");
+    const rootRef = firestore.collection("users").doc(user.uid);
+    const ref = rootRef.collection("planner").doc("main");
+    const tasksRef = rootRef.collection("tasks");
+    userRef.current = rootRef;
     plannerRef.current = ref;
+    tasksCollectionRef.current = tasksRef;
 
     const unsubscribe = ref.onSnapshot(async (snapshot) => {
       if (!snapshot.exists) {
-        const initial: PlannerDocument = {
-          tasks: initialTasks,
-          notes: initialNotes,
-          salesPlan: initialSalesPlan,
-          finance: initialFinance,
-          goals: initialGoals,
-        };
+        const legacySnapshot = await rootRef.get();
+        const legacyPlanner = legacySnapshot.exists
+          ? (legacySnapshot.data() as { planner?: Partial<PlannerDocument> }).planner
+          : null;
+        const initial: PlannerDocument = legacyPlanner && typeof legacyPlanner === "object"
+          ? {
+              tasks: normalizeTasks(legacyPlanner.tasks),
+              notes: Array.isArray(legacyPlanner.notes) ? legacyPlanner.notes : initialNotes,
+              salesPlan: legacyPlanner.salesPlan && typeof legacyPlanner.salesPlan === "object"
+                ? normalizeSalesPlan(legacyPlanner.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
+                : initialSalesPlan,
+              finance: legacyPlanner.finance && typeof legacyPlanner.finance === "object"
+                ? normalizeFinance(legacyPlanner.finance as Partial<FinanceState> & Record<string, unknown>)
+                : initialFinance,
+              goals: Array.isArray(legacyPlanner.goals)
+                ? legacyPlanner.goals.map((goal) => normalizeGoal(
+                    goal as unknown as Partial<Goal> & Record<string, unknown>,
+                    localDate(),
+                  ))
+                : initialGoals,
+            }
+          : {
+              tasks: initialTasks,
+              notes: initialNotes,
+              salesPlan: initialSalesPlan,
+              finance: initialFinance,
+              goals: initialGoals,
+            };
         applyTasks(initial.tasks);
         applyNotes(initial.notes);
         applySalesPlan(initial.salesPlan);
         applyFinance(initial.finance);
         applyGoals(initial.goals);
-        await ref.set({ ...initial, updatedAt: serverTimestamp() });
-      } else if (pendingWritesRef.current === 0) {
+        await ref.set({ ...initial, tasksMigrated: false, updatedAt: serverTimestamp() });
+        await rootRef.set({ planner: initial, updatedAt: serverTimestamp() }, { merge: true });
+      } else {
         const remote = snapshot.data() as Partial<PlannerDocument>;
-        const normalizedTasks = Array.isArray(remote.tasks)
-          ? remote.tasks.map((task) => ({ ...task, date: task.date || today }))
-          : [];
-        applyTasks(normalizedTasks);
-        applyNotes(Array.isArray(remote.notes) ? remote.notes : []);
-        applySalesPlan(remote.salesPlan && typeof remote.salesPlan === "object"
+        const normalizedSalesPlan = remote.salesPlan && typeof remote.salesPlan === "object"
           ? normalizeSalesPlan(remote.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
-          : initialSalesPlan);
-        applyFinance(remote.finance && typeof remote.finance === "object"
+          : initialSalesPlan;
+        const normalizedFinance = remote.finance && typeof remote.finance === "object"
           ? normalizeFinance(remote.finance as Partial<FinanceState> & Record<string, unknown>)
-          : initialFinance);
-        applyGoals(Array.isArray(remote.goals)
+          : initialFinance;
+        const normalizedGoals = Array.isArray(remote.goals)
           ? remote.goals.map((goal) => normalizeGoal(
               goal as unknown as Partial<Goal> & Record<string, unknown>,
-              today,
+              localDate(),
             ))
-          : initialGoals);
+          : initialGoals;
+        applyNotes(Array.isArray(remote.notes) ? remote.notes : []);
+        applySalesPlan(normalizedSalesPlan);
+        applyFinance(normalizedFinance);
+        applyGoals(normalizedGoals);
+
+        const normalizedDocument = {
+          notes: Array.isArray(remote.notes) ? remote.notes : [],
+          salesPlan: normalizedSalesPlan,
+          finance: normalizedFinance,
+          goals: normalizedGoals,
+        };
+        void rootRef.set({ planner: normalizedDocument, updatedAt: serverTimestamp() }, { merge: true });
+        if (!remote.tasksMigrated) {
+          const legacyTasks = normalizeTasks(remote.tasks);
+          await Promise.all(legacyTasks.map((task) => tasksRef.doc(task.id).set({ ...task }, { merge: true })));
+          await ref.set({ tasksMigrated: true, updatedAt: serverTimestamp() }, { merge: true });
+        }
       }
 
       setLoading(false);
@@ -407,9 +480,23 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       setSyncStatus("error");
     });
 
+    const unsubscribeTasks = tasksRef.onSnapshot((snapshot) => {
+      const remoteTasks = snapshot.docs.map((document, index) => normalizeTask({
+        ...document.data(),
+        id: document.id,
+      }, index));
+      applyTasks(remoteTasks);
+      if (pendingWritesRef.current === 0) setSyncStatus("synced");
+    }, (reason) => {
+      console.error(reason);
+      setSyncStatus("error");
+    });
+
     return () => {
       plannerRef.current = null;
+      tasksCollectionRef.current = null;
       unsubscribe();
+      unsubscribeTasks();
     };
   }, [user]);
 
@@ -423,12 +510,15 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     syncStatus,
 
     addTask: (input) => {
+      const task: Task = { id: crypto.randomUUID(), done: false, ...input };
       const nextTasks = [
         ...tasksRef.current,
-        { id: crypto.randomUUID(), done: false, ...input },
+        task,
       ];
       applyTasks(nextTasks);
-      void persist(nextTasks, notesRef.current, salesPlanRef.current);
+      void persistTask(task, task.id).then(() => {
+        notifyTelegramAboutNewTask();
+      });
     },
 
     toggleTask: (id) => {
@@ -436,13 +526,14 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         task.id === id ? { ...task, done: !task.done } : task,
       );
       applyTasks(nextTasks);
-      void persist(nextTasks, notesRef.current, salesPlanRef.current);
+      const changed = nextTasks.find((task) => task.id === id);
+      if (changed) void persistTask(changed, id);
     },
 
     deleteTask: (id) => {
       const nextTasks = tasksRef.current.filter((task) => task.id !== id);
       applyTasks(nextTasks);
-      void persist(nextTasks, notesRef.current, salesPlanRef.current);
+      void persistTask(null, id);
     },
 
     updateTask: (id, input) => {
@@ -450,7 +541,8 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         task.id === id ? { ...task, ...input } : task,
       );
       applyTasks(nextTasks);
-      void persist(nextTasks, notesRef.current, salesPlanRef.current);
+      const changed = nextTasks.find((task) => task.id === id);
+      if (changed) void persistTask(changed, id);
     },
 
     addNote: (text) => {
@@ -467,13 +559,13 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       }, ...notesRef.current];
 
       applyNotes(nextNotes);
-      void persist(tasksRef.current, nextNotes, salesPlanRef.current);
+      void persistField("notes", nextNotes);
     },
 
     deleteNote: (id) => {
       const nextNotes = notesRef.current.filter((note) => note.id !== id);
       applyNotes(nextNotes);
-      void persist(tasksRef.current, nextNotes, salesPlanRef.current);
+      void persistField("notes", nextNotes);
     },
 
     addSalesMonth: (targetAmount, startDate, endDate) => {
@@ -493,7 +585,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: [month, ...salesPlanRef.current.months],
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     selectSalesMonth: (monthId) => {
@@ -502,6 +594,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         activeMonthId: monthId,
       });
       applySalesPlan(next);
+      void persistField("salesPlan", next);
     },
 
     deleteSalesMonth: (monthId) => {
@@ -516,17 +609,23 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: remainingMonths,
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     addFinanceIncome: (input) => {
       const savingsAmount = Math.max(0, input.amount * (Number(input.savingsPercent || 0) / 100));
       const nextFinance = {
         ...financeRef.current,
-        incomes: [{ id: crypto.randomUUID(), ...input, savingsAmount }, ...financeRef.current.incomes],
+        incomes: [{
+          id: crypto.randomUUID(),
+          ...input,
+          savingsAmount,
+          status: input.date > localDate() ? "planned" as const : "completed" as const,
+          probability: input.probability ?? 100,
+        }, ...financeRef.current.incomes],
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     deleteFinanceIncome: (id) => {
@@ -535,16 +634,45 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         incomes: financeRef.current.incomes.filter((income) => income.id !== id),
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
+    },
+
+    updateFinanceIncome: (id, input) => {
+      const nextFinance = {
+        ...financeRef.current,
+        incomes: financeRef.current.incomes.map((income) => {
+          if (income.id !== id) return income;
+          const nextIncome = { ...income, ...input };
+          const savingsAmount = Math.max(0, nextIncome.amount * (Number(nextIncome.savingsPercent || 0) / 100));
+          return { ...nextIncome, savingsAmount };
+        }),
+      };
+      applyFinance(nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     addFinanceExpense: (input) => {
       const nextFinance = {
         ...financeRef.current,
-        expenses: [{ id: crypto.randomUUID(), ...input }, ...financeRef.current.expenses],
+        expenses: [{
+          id: crypto.randomUUID(),
+          ...input,
+          status: input.date > localDate() ? "planned" as const : "completed" as const,
+        }, ...financeRef.current.expenses],
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
+    },
+
+    updateFinanceExpense: (id, input) => {
+      const nextFinance = {
+        ...financeRef.current,
+        expenses: financeRef.current.expenses.map((expense) => (
+          expense.id === id ? { ...expense, ...input } : expense
+        )),
+      };
+      applyFinance(nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     deleteFinanceExpense: (id) => {
@@ -553,36 +681,75 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         expenses: financeRef.current.expenses.filter((expense) => expense.id !== id),
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     addPlannedExpense: (input) => {
       const nextFinance = {
         ...financeRef.current,
-        plannedExpenses: [{ id: crypto.randomUUID(), ...input }, ...financeRef.current.plannedExpenses],
+        expenses: [{
+          id: crypto.randomUUID(),
+          amount: input.amount,
+          currency: input.currency,
+          date: input.dueDate,
+          category: input.title,
+          title: input.title,
+          note: "",
+          status: "planned" as const,
+        }, ...financeRef.current.expenses],
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
+    },
+
+    updatePlannedExpense: (id, input) => {
+      const nextFinance = {
+        ...financeRef.current,
+        expenses: financeRef.current.expenses.map((expense) =>
+          expense.id === id
+            ? {
+                ...expense,
+                amount: input.amount,
+                currency: input.currency,
+                date: input.dueDate,
+                category: input.title,
+                title: input.title,
+                status: input.status === "paid" ? "completed" as const : input.status === "cancelled" ? "cancelled" as const : "planned" as const,
+              }
+            : expense,
+        ),
+        plannedExpenses: financeRef.current.plannedExpenses.map((expense) =>
+          expense.id === id ? { id, ...input } : expense,
+        ),
+      };
+      applyFinance(nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     updatePlannedExpenseStatus: (id, status) => {
       const nextFinance = {
         ...financeRef.current,
+        expenses: financeRef.current.expenses.map((expense) =>
+          expense.id === id
+            ? { ...expense, status: status === "paid" ? "completed" as const : status === "cancelled" ? "cancelled" as const : "planned" as const }
+            : expense,
+        ),
         plannedExpenses: financeRef.current.plannedExpenses.map((expense) =>
           expense.id === id ? { ...expense, status } : expense,
         ),
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     deletePlannedExpense: (id) => {
       const nextFinance = {
         ...financeRef.current,
+        expenses: financeRef.current.expenses.filter((expense) => expense.id !== id),
         plannedExpenses: financeRef.current.plannedExpenses.filter((expense) => expense.id !== id),
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     addDebt: (input) => {
@@ -597,7 +764,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         }, ...financeRef.current.debts],
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     updateDebt: (id, paidAmount) => {
@@ -614,7 +781,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         }),
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     deleteDebt: (id) => {
@@ -623,7 +790,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         debts: financeRef.current.debts.filter((debt) => debt.id !== id),
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     updateExchangeRate: (currency, rate) => {
@@ -633,7 +800,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         rates: { ...financeRef.current.rates, [currency]: rate },
       };
       applyFinance(nextFinance);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, goalsRef.current, nextFinance);
+      void persistField("finance", nextFinance);
     },
 
     updateSalesMonth: (monthId, targetAmount, startDate, endDate) => {
@@ -656,7 +823,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: nextMonths,
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     updateSalesTarget: (targetAmount, deadline, monthStartDay) => {
@@ -678,7 +845,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: nextMonths,
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     addSaleEntry: (source, amount, date) => {
@@ -701,7 +868,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: nextMonths,
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     updateSaleEntry: (id, source, amount, date) => {
@@ -718,7 +885,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: nextMonths,
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     deleteSaleEntry: (id) => {
@@ -731,7 +898,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         months: nextMonths,
       });
       applySalesPlan(next);
-      void persist(tasksRef.current, notesRef.current, next);
+      void persistField("salesPlan", next);
     },
 
     addGoal: (input) => {
@@ -747,7 +914,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       });
       const nextGoals = [nextGoal, ...goalsRef.current];
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
       return goalId;
     },
 
@@ -756,13 +923,13 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         goal.id === id ? recalculateGoal({ ...goal, ...input }) : goal,
       );
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     deleteGoal: (id) => {
       const nextGoals = goalsRef.current.filter((goal) => goal.id !== id);
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     reorderGoals: (sourceId, targetId) => {
@@ -775,7 +942,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       const [moved] = current.splice(sourceIndex, 1);
       current.splice(targetIndex, 0, moved);
       applyGoals(current);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, current);
+      void persistField("goals", current);
     },
 
     addGoalEntry: (goalId, entryValue, date, note) => {
@@ -793,7 +960,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         return recalculateGoal({ ...goal, entries: [...goal.entries, entry] });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     updateGoalEntry: (goalId, entryId, entryValue, date, note) => {
@@ -809,7 +976,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         return recalculateGoal({ ...goal, entries });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     deleteGoalEntry: (goalId, entryId) => {
@@ -821,7 +988,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     addGoalChecklistItem: (goalId, title) => {
@@ -844,7 +1011,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     updateGoalChecklistItem: (goalId, itemId, title) => {
@@ -860,7 +1027,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     toggleGoalChecklistItem: (goalId, itemId) => {
@@ -880,7 +1047,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     deleteGoalChecklistItem: (goalId, itemId) => {
@@ -892,7 +1059,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     addGoalPhoto: (goalId, dataUrl, date, caption) => {
@@ -912,7 +1079,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         };
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     updateGoalPhoto: (goalId, photoId, dataUrl, date, caption) => {
@@ -931,7 +1098,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         };
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
 
     deleteGoalPhoto: (goalId, photoId) => {
@@ -953,9 +1120,9 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         };
       });
       applyGoals(nextGoals);
-      void persist(tasksRef.current, notesRef.current, salesPlanRef.current, nextGoals);
+      void persistField("goals", nextGoals);
     },
-  }), [tasks, notes, salesPlan, goals, loading, syncStatus]);
+  }), [tasks, notes, salesPlan, finance, goals, loading, syncStatus]);
 
   return <PlannerContext.Provider value={value}>{children}</PlannerContext.Provider>;
 }

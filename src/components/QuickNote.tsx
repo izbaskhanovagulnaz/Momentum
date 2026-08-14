@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { StickyNote, Trash2 } from "lucide-react";
 import type { NoteItem } from "../types";
 
 interface QuickNoteProps {
@@ -20,8 +20,13 @@ export default function QuickNote({ notes, onSave, onDelete, limit = 3 }: QuickN
   };
 
   return (
-    <div className="rounded-3xl border border-line-strong bg-surface-subtle p-6 shadow-sm md:p-7">
-      <p className="mb-4 text-[13px] text-ink-muted">Быстрая заметка</p>
+    <div className="neu-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="neu-icon h-8 w-8 bg-warning-soft text-warning">
+          <StickyNote size={15} />
+        </span>
+        <p className="text-[13px] font-medium text-ink-muted">Быстрая заметка</p>
+      </div>
 
       <textarea
         value={draft}
@@ -32,26 +37,26 @@ export default function QuickNote({ notes, onSave, onDelete, limit = 3 }: QuickN
         }}
         placeholder="Записать мысль..."
         rows={2}
-        className="w-full resize-none bg-transparent text-[14px] text-ink placeholder:text-ink-muted focus:outline-none"
+        className="neu-input w-full resize-none py-3 leading-relaxed placeholder:text-ink-muted"
       />
 
       {notes.length > 0 && (
-        <div className="mt-4 divide-y divide-line-strong border-t border-line-strong pt-2">
+        <div className="mt-4 flex flex-col gap-2">
           {notes.slice(0, limit).map((note) => (
-            <div key={note.id} className="group flex items-start gap-3 py-3 first:pt-2 last:pb-0">
+            <div key={note.id} className="group flex items-start gap-3 rounded-2xl bg-surface-subtle p-3">
               <div className="min-w-0 flex-1">
-                <p className="break-words text-[14px] text-ink">{note.text}</p>
-                <p className="mt-0.5 text-[12px] text-ink-muted">{note.timestamp}</p>
+                <p className="break-words text-[14px] leading-relaxed text-ink">{note.text}</p>
+                <p className="mt-1 text-[12px] text-ink-muted">{note.timestamp}</p>
               </div>
               {onDelete && (
                 <button
                   type="button"
                   onClick={() => onDelete(note.id)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-muted transition hover:bg-danger-soft hover:text-danger md:h-8 md:w-8 md:opacity-0 md:group-hover:opacity-100"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-ink-muted transition hover:bg-danger-soft hover:text-danger"
                   aria-label="Удалить заметку"
                   title="Удалить заметку"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={15} />
                 </button>
               )}
             </div>

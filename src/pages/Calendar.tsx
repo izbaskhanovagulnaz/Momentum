@@ -3,11 +3,7 @@ import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, Edit3, Plus, Trash2 } 
 import TopBar from "../components/TopBar";
 import { usePlanner } from "../PlannerContext";
 import type { Task } from "../types";
-
-function localDate(date = new Date()) {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
+import { localDate } from "../utils";
 
 function toDate(value: string) {
   return new Date(`${value}T12:00:00`);
