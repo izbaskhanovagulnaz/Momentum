@@ -20,68 +20,70 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   return (
-    <aside className="sticky top-0 hidden h-screen shrink-0 flex-col gap-6 px-4 py-6 md:flex md:w-[236px]">
-      <div className="neu-card-sm flex items-center gap-3 px-3 py-3">
-        <div className="neu-icon h-10 w-10 bg-accent-soft text-[16px] font-bold text-accent">
-          M
+    <aside className="sticky top-0 hidden h-screen shrink-0 px-4 py-6 md:block md:w-[236px]">
+      <div className="neu-card-sm flex h-full flex-col gap-3 p-3">
+        <div className="flex items-center gap-3 px-1 py-1">
+          <div className="neu-icon h-10 w-10 bg-accent-soft text-[16px] font-bold text-accent">
+            M
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold text-ink">Momentum</p>
+            <p className="text-[11px] text-ink-muted">Personal OS</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold text-ink">Momentum</p>
-          <p className="text-[11px] text-ink-muted">Personal OS</p>
-        </div>
-      </div>
 
-      <nav className="neu-flat flex flex-1 flex-col gap-1.5 p-3">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end, tint }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              `group flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition ${
-                isActive
-                  ? "neu-card-sm font-semibold text-ink"
-                  : "text-ink-secondary hover:bg-white/60 hover:text-ink"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span
-                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl transition ${
-                    isActive ? tint : "bg-transparent text-ink-muted group-hover:text-ink"
-                  }`}
-                >
-                  <Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} />
-                </span>
-                <span className="truncate">{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-
-      <NavLink
-        to="/settings"
-        className={({ isActive }) =>
-          `neu-card-sm flex h-12 items-center gap-3 rounded-3xl px-3 text-[14px] transition ${
-            isActive ? "font-semibold text-ink" : "text-ink-secondary hover:text-ink"
-          }`
-        }
-      >
-        {({ isActive }) => (
-          <>
-            <span
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${
-                isActive ? "bg-accent-soft text-accent" : "text-ink-muted"
-              }`}
+        <nav className="flex flex-col gap-1.5">
+          {NAV_ITEMS.map(({ to, label, icon: Icon, end, tint }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                `group flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition ${
+                  isActive
+                    ? "neu-card-sm font-semibold text-ink"
+                    : "text-ink-secondary hover:bg-white/60 hover:text-ink"
+                }`
+              }
             >
-              <Settings size={17} strokeWidth={isActive ? 2.25 : 1.75} />
-            </span>
-            <span>Настройки</span>
-          </>
-        )}
-      </NavLink>
+              {({ isActive }) => (
+                <>
+                  <span
+                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl transition ${
+                      isActive ? tint : "bg-transparent text-ink-muted group-hover:text-ink"
+                    }`}
+                  >
+                    <Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} />
+                  </span>
+                  <span className="truncate">{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `neu-flat mt-auto flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition ${
+              isActive ? "font-semibold text-ink" : "text-ink-secondary hover:text-ink"
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <span
+                className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${
+                  isActive ? "bg-accent-soft text-accent" : "text-ink-muted"
+                }`}
+              >
+                <Settings size={17} strokeWidth={isActive ? 2.25 : 1.75} />
+              </span>
+              <span>Настройки</span>
+            </>
+          )}
+        </NavLink>
+      </div>
     </aside>
   );
 }

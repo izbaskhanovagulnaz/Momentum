@@ -291,7 +291,7 @@ export default function Finance() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-6 flex items-center gap-3 lg:mb-4">
         <span className="neu-icon h-11 w-11 bg-success-soft text-success">
           <Wallet size={19} />
         </span>
@@ -307,7 +307,7 @@ export default function Finance() {
         fromUsd={fromUsd}
       />
 
-      <div className="neu-flat mb-5 inline-flex flex-wrap gap-1 p-1.5">
+      <div className="neu-flat mb-5 flex w-full flex-wrap gap-1 p-1.5">
         {tabs.map(([id, label]) => (
           <button
             key={id}
@@ -455,11 +455,11 @@ function FinanceSummaryPanel({
   const moneyUzs = (value: number) => money(fromUsd(value, "UZS"), "UZS");
 
   return (
-    <section className="neu-card mb-5 p-5 md:p-6">
+    <section className="neu-card mb-5 p-5 md:p-6 lg:mb-4 lg:p-4">
       <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1fr]">
-        <div className="neu-flat p-4">
+        <div className="neu-flat p-4 lg:p-3">
           <p className="text-[12px] text-ink-muted">Фактический баланс</p>
-          <h2 className={`mt-1 text-[24px] font-semibold ${actual.balance < 0 ? "text-danger" : "text-ink"}`}>{moneyUzs(actual.balance)}</h2>
+          <h2 className={`mt-1 text-[24px] font-semibold lg:text-[21px] ${actual.balance < 0 ? "text-danger" : "text-ink"}`}>{moneyUzs(actual.balance)}</h2>
           <p className="mt-2 text-[12px] text-ink-muted">Плановый баланс: {moneyUzs(plan.balance)}</p>
         </div>
         <div className="neu-flat px-4 py-3">
@@ -473,7 +473,7 @@ function FinanceSummaryPanel({
             />
           </div>
           <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
-            <strong className="text-[20px] text-ink">{moneyUzs(cashNeed.required)}</strong>
+            <strong className="text-[20px] text-ink lg:text-[18px]">{moneyUzs(cashNeed.required)}</strong>
             <span className={`rounded-2xl px-3 py-2 text-[12px] font-medium ${cashNeed.shortage > 0 ? "bg-danger-soft text-danger" : "bg-success-soft text-success"}`}>
               {cashNeed.targetDate ? cashNeed.shortage > 0 ? `Не хватает ${moneyUzs(cashNeed.shortage)}` : "Хватает" : "Выберите дату"}
             </span>
@@ -501,8 +501,8 @@ function CompactMetric({ label, value, tone = "default" }: { label: string; valu
 
 function Panel({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <section className="neu-card p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <section className="neu-card p-5 lg:p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 lg:mb-3">
         <h2 className="text-[16px] font-semibold text-ink">{title}</h2>
       </div>
       {children}
@@ -520,11 +520,11 @@ function Input({ label, value, onChange, type = "text", moneyInput = false }: { 
     onChange(nextValue);
   };
 
-  return <label className="grid gap-1.5 text-[12px] text-ink-muted">{label}<input type={type} inputMode={moneyInput ? "decimal" : undefined} value={value} onChange={(event) => handleChange(event.target.value)} className="neu-input h-12 bg-white text-[16px]" /></label>;
+  return <label className="grid gap-1.5 text-[12px] text-ink-muted">{label}<input type={type} inputMode={moneyInput ? "decimal" : undefined} value={value} onChange={(event) => handleChange(event.target.value)} className="neu-input h-12 bg-white text-[16px] lg:h-10 lg:text-[14px]" /></label>;
 }
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: string[] }) {
-  return <label className="grid gap-1.5 text-[12px] text-ink-muted">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="neu-input h-12 bg-white text-[16px]">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+  return <label className="grid gap-1.5 text-[12px] text-ink-muted">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="neu-input h-12 bg-white text-[16px] lg:h-10 lg:text-[14px]">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
 }
 
 function DateFilter({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -532,7 +532,7 @@ function DateFilter({ label, value, onChange }: { label: string; value: string; 
     <div className="grid gap-1.5 text-[12px] text-ink-muted">
       {label}
       <div className="flex gap-2">
-        <input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="neu-input h-12 min-w-0 flex-1 bg-white text-[16px]" />
+        <input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="neu-input h-12 min-w-0 flex-1 bg-white text-[16px] lg:h-10 lg:text-[14px]" />
         {value && <IconButton label="Показать все даты" onClick={() => onChange("")}><X size={16} /></IconButton>}
       </div>
     </div>
@@ -564,15 +564,15 @@ function List({
 }) {
   return (
     <Panel title={title}>
-      {(filter || total) && (
-        <div className="neu-flat mb-3 grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_160px]">
+      {filter && (
+        <div className="neu-flat mb-3 grid gap-3 p-3 sm:grid-cols-3">
           {filter}
-          {total && (
-            <div className="min-w-0 self-end rounded-xl bg-white px-3 py-2 shadow-neu-sm">
-              <p className="truncate text-[11px] text-ink-muted">Итого</p>
-              <p className="break-words text-[14px] font-semibold leading-snug text-ink">{total}</p>
-            </div>
-          )}
+        </div>
+      )}
+      {total && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-white px-4 py-2.5 shadow-neu-sm">
+          <p className="text-[11px] text-ink-muted">Итого</p>
+          <p className="min-w-0 break-words text-right text-[14px] font-semibold leading-snug text-ink">{total}</p>
         </div>
       )}
       <FinanceRows items={items} />
@@ -582,7 +582,7 @@ function List({
 
 function FinanceRows({ items }: { items: Array<{ id: string; title: string; meta: string; value: string; onDelete: () => void; actions?: React.ReactNode }> }) {
   return (
-    <div className="mt-4 flex flex-col gap-2">
+    <div className="mt-4 flex flex-col gap-2 lg:mt-3">
       {items.length === 0 && <p className="neu-flat py-5 text-center text-[13px] text-ink-muted">Пока здесь пусто</p>}
       {items.map((item) => (
         <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface-subtle px-4 py-3">
