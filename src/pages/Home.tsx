@@ -132,12 +132,12 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
-          className="neu-card min-w-0 p-6 md:p-8"
+          className="neu-card min-w-0 p-6 md:p-8 lg:p-5"
         >
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-[12px] font-medium text-accent">
             <Sparkles size={13} />
@@ -145,7 +145,7 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="max-w-2xl text-[32px] font-semibold leading-[1.1] text-ink md:text-[44px]">
+              <h1 className="max-w-2xl text-[32px] font-semibold leading-[1.1] text-ink md:text-[44px] lg:text-[34px]">
                 {greeting}, {firstName}
               </h1>
               <p className="mt-3 text-[15px] text-ink-secondary">
@@ -177,7 +177,7 @@ export default function Home() {
           </div>
 
           <div className="mt-7 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="neu-flat p-5">
+            <div className="neu-flat p-5 lg:p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <p className="text-[13px] font-medium text-ink-muted">Следующее</p>
                 <span className="neu-icon h-8 w-8 bg-sky-soft text-sky">
@@ -202,13 +202,13 @@ export default function Home() {
 
             <Link
               to="/finance?tab=sales"
-              className="neu-card block bg-gradient-to-br from-accent to-[#9b8cff] p-5 text-white transition hover:brightness-105 active:scale-[0.98]"
+              className="neu-card block bg-gradient-to-br from-accent to-[#9b8cff] p-5 text-white transition hover:brightness-105 active:scale-[0.98] lg:p-4"
             >
               <div className="mb-4 flex items-center justify-between gap-3">
                 <p className="text-[13px] font-medium text-white/80">Продажи</p>
                 <TrendingUp size={17} className="text-white/90" />
               </div>
-              <p className="text-[26px] font-semibold">{salesProgress}%</p>
+              <p className="text-[26px] font-semibold lg:text-[22px]">{salesProgress}%</p>
               <p className="mt-2 text-[13px] text-white/80">
                 ${achievedSales.toLocaleString("en-US")} из ${salesPlan.targetAmount.toLocaleString("en-US")}
               </p>
@@ -216,11 +216,11 @@ export default function Home() {
           </div>
         </motion.div>
 
-        <aside className="neu-card p-6">
+        <aside className="neu-card p-6 lg:p-5">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <p className="text-[13px] text-ink-muted">Финансовый прогноз</p>
-              <p className="mt-2 text-[26px] font-semibold text-ink">{money(actualBalance)}</p>
+              <p className="mt-2 text-[26px] font-semibold text-ink lg:text-[22px]">{money(actualBalance)}</p>
             </div>
             <span className="neu-icon h-11 w-11 bg-success-soft text-success">
               <Wallet size={19} />
@@ -256,8 +256,8 @@ export default function Home() {
         </aside>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="neu-card p-6">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-4">
+        <div className="neu-card p-6 lg:p-5">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="text-[13px] text-ink-muted">Сегодня</p>
@@ -314,7 +314,7 @@ export default function Home() {
 
         <div className="space-y-6">
           <QuickNote notes={notes} onSave={addNote} onDelete={deleteNote} />
-          <div className="neu-card p-5">
+          <div className="neu-card p-5 lg:p-4">
             <p className="text-[13px] text-ink-muted">Фокус</p>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-secondary">
               Главное сегодня: закрывать задачи по времени и держать финансы под контролем.
