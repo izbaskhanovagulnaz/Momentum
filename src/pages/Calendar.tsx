@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, Edit3, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, Edit3, List, Plus, Trash2 } from "lucide-react";
+import DayTimeline from "../components/DayTimeline";
 import TopBar from "../components/TopBar";
 import { usePlanner } from "../PlannerContext";
 import type { Task } from "../types";
@@ -34,6 +35,7 @@ export default function CalendarPage() {
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("");
   const [editing, setEditing] = useState<Task | null>(null);
+  const [dayView, setDayView] = useState<"timeline" | "list">("timeline");
 
   const days = useMemo(() => buildMonth(visibleMonth), [visibleMonth]);
 
@@ -272,6 +274,54 @@ export default function CalendarPage() {
       </div>
     );
 
+  const viewSwitch = (
+    <div className="flex items-center gap-1 rounded-xl border border-line-strong bg-white p-1">
+      <button
+        type="button"
+        onClick={() => setDayView("timeline")}
+        className={`flex h-7 items-center gap-1 rounded-lg px-2 text-[12px] font-medium transition ${
+          dayView === "timeline" ? "bg-accent text-white" : "text-ink-muted"
+        }`}
+        aria-label="Показать часы"
+      >
+        <Clock3 size={14} />
+        Часы
+      </button>
+      <button
+        type="button"
+        onClick={() => setDayView("list")}
+        className={`flex h-7 items-center gap-1 rounded-lg px-2 text-[12px] font-medium transition ${
+          dayView === "list" ? "bg-accent text-white" : "text-ink-muted"
+        }`}
+        aria-label="Показать списком"
+      >
+        <List size={14} />
+        Список
+      </button>
+    </div>
+  );
+
+  const dayBody =
+    dayView === "timeline" ? (
+      <DayTimeline
+        date={selectedDate}
+        tasks={selectedTasks}
+        onCreate={(value, slotTime) =>
+          addTask({
+            title: value,
+            date: selectedDate,
+            time: slotTime,
+            priority: "normal",
+          })
+        }
+        onToggle={toggleTask}
+        onEdit={(task) => setEditing({ ...task })}
+        onDelete={deleteTask}
+      />
+    ) : (
+      taskList
+    );
+
   return (
     <div>
       <TopBar eyebrow={selectedLabel} title="Календарь" />
@@ -335,8 +385,14 @@ export default function CalendarPage() {
           </div>
 
           {taskComposer}
-          <div className="mt-4">
-            {taskList}
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-[13px] font-medium text-ink">Задачи дня</p>
+            {viewSwitch}
+          </div>
+
+          <div className="mt-3">
+            {dayBody}
           </div>
         </section>
       </div>
@@ -399,13 +455,16 @@ export default function CalendarPage() {
           {taskComposer}
 
           <div className="mt-5">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[13px] font-medium text-ink">Задачи дня</p>
-              <span className="text-[12px] text-ink-muted">
-                {selectedTasks.length}
-              </span>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[13px] font-medium text-ink">
+                Задачи дня
+                <span className="ml-2 text-[12px] text-ink-muted">
+                  {selectedTasks.length}
+                </span>
+              </p>
+              {viewSwitch}
             </div>
-            {taskList}
+            {dayBody}
           </div>
         </aside>
       </div>
