@@ -1,29 +1,32 @@
 import { NavLink } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
-  Calendar,
-  CheckSquare,
-  Home,
-  Settings,
-  StickyNote,
-  Target,
-  Wallet,
+  CalendarDays,
+  CircleCheckBig,
+  Goal,
+  House,
+  NotebookPen,
+  Settings2,
+  WalletMinimal,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Главная", icon: Home, end: true, tint: "bg-accent-soft text-accent" },
-  { to: "/calendar", label: "Календарь", icon: Calendar, end: false, tint: "bg-sky-soft text-sky" },
-  { to: "/tasks", label: "Задачи", icon: CheckSquare, end: false, tint: "bg-mint-soft text-mint" },
-  { to: "/goals", label: "Цели", icon: Target, end: false, tint: "bg-peach-soft text-peach" },
-  { to: "/finance", label: "Финансы", icon: Wallet, end: false, tint: "bg-success-soft text-success" },
-  { to: "/notes", label: "Заметки", icon: StickyNote, end: false, tint: "bg-warning-soft text-warning" },
+  { to: "/", label: "Главная", icon: House, end: true, tint: "text-accent" },
+  { to: "/calendar", label: "Календарь", icon: CalendarDays, end: false, tint: "text-sky" },
+  { to: "/tasks", label: "Задачи", icon: CircleCheckBig, end: false, tint: "text-mint" },
+  { to: "/goals", label: "Цели", icon: Goal, end: false, tint: "text-peach" },
+  { to: "/finance", label: "Финансы", icon: WalletMinimal, end: false, tint: "text-success" },
+  { to: "/notes", label: "Заметки", icon: NotebookPen, end: false, tint: "text-warning" },
 ];
+
+const LENS_SPRING = { type: "spring", stiffness: 520, damping: 34, mass: 0.9 } as const;
 
 export default function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-screen shrink-0 px-4 py-6 md:block md:w-[236px]">
-      <div className="neu-card-sm flex h-full flex-col gap-3 p-3">
-        <div className="flex items-center gap-3 px-1 py-1">
-          <div className="neu-icon h-10 w-10 bg-accent-soft text-[16px] font-bold text-accent">
+      <div className="glass flex h-full flex-col gap-3 rounded-[28px] p-3">
+        <div className="glass-layer flex items-center gap-3 px-1 py-1">
+          <div className="glass-lens grid h-10 w-10 place-items-center rounded-2xl text-[16px] font-bold text-accent">
             M
           </div>
           <div className="min-w-0">
@@ -32,30 +35,40 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <nav className="flex flex-col gap-1.5">
+        <nav className="glass-layer flex flex-col gap-1">
           {NAV_ITEMS.map(({ to, label, icon: Icon, end, tint }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `group flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition ${
-                  isActive
-                    ? "neu-card-sm font-semibold text-ink"
-                    : "text-ink-secondary hover:bg-white/60 hover:text-ink"
+                `group relative flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition-colors ${
+                  isActive ? "font-semibold text-ink" : "text-ink-secondary hover:text-ink"
                 }`
               }
             >
               {({ isActive }) => (
                 <>
+                  {isActive && (
+                    <motion.span
+                      layoutId="sidebar-nav-lens"
+                      className="glass-lens absolute inset-0 rounded-2xl"
+                      transition={LENS_SPRING}
+                    />
+                  )}
                   <span
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl transition ${
-                      isActive ? tint : "bg-transparent text-ink-muted group-hover:text-ink"
+                    className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center transition-colors ${
+                      isActive ? tint : "text-ink-muted group-hover:text-ink"
                     }`}
                   >
-                    <Icon size={17} strokeWidth={isActive ? 2.25 : 1.75} />
+                    <Icon
+                      size={19}
+                      strokeWidth={isActive ? 2.15 : 1.7}
+                      fill={isActive ? "currentColor" : "none"}
+                      fillOpacity={isActive ? 0.16 : 0}
+                    />
                   </span>
-                  <span className="truncate">{label}</span>
+                  <span className="relative z-10 truncate">{label}</span>
                 </>
               )}
             </NavLink>
@@ -65,7 +78,7 @@ export default function Sidebar() {
         <NavLink
           to="/settings"
           className={({ isActive }) =>
-            `neu-flat mt-auto flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] transition ${
+            `glass-lens glass-press glass-layer mt-auto flex h-12 items-center gap-3 rounded-2xl px-3 text-[14px] ${
               isActive ? "font-semibold text-ink" : "text-ink-secondary hover:text-ink"
             }`
           }
@@ -73,11 +86,16 @@ export default function Sidebar() {
           {({ isActive }) => (
             <>
               <span
-                className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${
-                  isActive ? "bg-accent-soft text-accent" : "text-ink-muted"
+                className={`grid h-8 w-8 shrink-0 place-items-center ${
+                  isActive ? "text-accent" : "text-ink-muted"
                 }`}
               >
-                <Settings size={17} strokeWidth={isActive ? 2.25 : 1.75} />
+                <Settings2
+                  size={19}
+                  strokeWidth={isActive ? 2.15 : 1.7}
+                  fill={isActive ? "currentColor" : "none"}
+                  fillOpacity={isActive ? 0.16 : 0}
+                />
               </span>
               <span>Настройки</span>
             </>

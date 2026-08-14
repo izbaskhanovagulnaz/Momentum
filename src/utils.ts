@@ -5,6 +5,26 @@ export function localDate(date = new Date()) {
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
 }
 
+/** Минуты от начала суток для строки HH:MM, иначе null. */
+export function timeToMinutes(value?: string) {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/** «10:00 – 11:30» для интервала и «10:00» для задачи без конца. */
+export function formatTimeRange(time?: string, endTime?: string) {
+  if (!time) return "";
+  const start = timeToMinutes(time);
+  const end = timeToMinutes(endTime);
+  if (start === null || end === null || end <= start) return time;
+  return `${time} – ${endTime}`;
+}
+
 export function clampMonthStartDay(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 1;

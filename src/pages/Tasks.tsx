@@ -17,7 +17,7 @@ import {
 import TopBar from "../components/TopBar";
 import { usePlanner } from "../PlannerContext";
 import type { Task } from "../types";
-import { localDate } from "../utils";
+import { formatTimeRange, localDate, timeToMinutes } from "../utils";
 
 type Filter = "all" | "open" | "done" | "today" | "urgent" | "overdue" | "week";
 type Priority = NonNullable<Task["priority"]>;
@@ -45,6 +45,7 @@ export default function Tasks() {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(localDate());
   const [time, setTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
   const [editing, setEditing] = useState<Task | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -83,13 +84,29 @@ export default function Tasks() {
       });
   }, [tasks, filter, query]);
 
+  // Конец учитывается только вместе с началом и только если он позже него.
+  const rangeValid = (from: string, to: string) => {
+    const start = timeToMinutes(from);
+    const end = timeToMinutes(to);
+    return start !== null && end !== null && end > start;
+  };
+
+  const endInvalid = Boolean(endTime) && !rangeValid(time, endTime);
+
   const submitTask = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = title.trim();
     if (!trimmed) return;
-    addTask({ title: trimmed, date, time: time || undefined, priority });
+    addTask({
+      title: trimmed,
+      date,
+      time: time || undefined,
+      endTime: rangeValid(time, endTime) ? endTime : undefined,
+      priority,
+    });
     setTitle("");
     setTime("");
+    setEndTime("");
     setPriority("normal");
     setComposerOpen(false);
   };
@@ -100,6 +117,9 @@ export default function Tasks() {
       title: editing.title.trim(),
       date: editing.date,
       time: editing.time || undefined,
+      endTime: rangeValid(editing.time || "", editing.endTime || "")
+        ? editing.endTime
+        : undefined,
       priority: editing.priority || "normal",
     });
     setEditing(null);
@@ -153,7 +173,7 @@ export default function Tasks() {
         onSubmit={submitTask}
         className="mb-4 hidden rounded-3xl border border-line-strong bg-surface-subtle p-5 shadow-sm md:block md:p-6"
       >
-        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_160px_130px_150px_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_150px_120px_120px_140px_auto]">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -171,6 +191,16 @@ export default function Tasks() {
             value={time}
             onChange={(e) => setTime(e.target.value)}
             className="h-11 rounded-2xl border border-line-strong bg-white px-4 text-[14px] outline-none focus:border-accent"
+            aria-label="Начало задачи"
+          />
+          <input
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            className={`h-11 rounded-2xl border bg-white px-4 text-[14px] outline-none focus:border-accent ${
+              endInvalid ? "border-danger" : "border-line-strong"
+            }`}
+            aria-label="Конец задачи"
           />
           <select
             value={priority}
@@ -230,7 +260,7 @@ export default function Tasks() {
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-ink-muted">
                     <span className="inline-flex items-center gap-1"><CalendarDays size={12}/>{new Intl.DateTimeFormat("ru-RU", {day:"numeric", month:"short"}).format(new Date(`${task.date}T12:00:00`))}</span>
-                    <span className="inline-flex items-center gap-1"><Clock3 size={12}/>{task.time || "Без времени"}</span>
+                    <span className="inline-flex items-center gap-1"><Clock3 size={12}/>{formatTimeRange(task.time, task.endTime) || "Без времени"}</span>
                   </div>
                 </div>
                 <button type="button" onClick={() => setEditing({...task})} className="rounded-xl p-2 text-ink-muted hover:bg-accent-soft hover:text-accent" aria-label="Редактировать"><Edit3 size={16}/></button>
@@ -295,12 +325,24 @@ export default function Tasks() {
                 </label>
 
                 <label className="space-y-1.5">
-                  <span className="pl-1 text-[11px] text-ink-muted">Время</span>
+                  <span className="pl-1 text-[11px] text-ink-muted">Время с</span>
                   <input
                     type="time"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
                     className="h-12 w-full rounded-2xl border border-line-strong bg-white px-3 text-[14px] outline-none focus:border-accent"
+                  />
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="pl-1 text-[11px] text-ink-muted">До</span>
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className={`h-12 w-full rounded-2xl border bg-white px-3 text-[14px] outline-none focus:border-accent ${
+                      endInvalid ? "border-danger" : "border-line-strong"
+                    }`}
                   />
                 </label>
               </div>
@@ -337,7 +379,29 @@ export default function Tasks() {
             <h3 className="text-[22px] font-semibold text-ink">Редактировать задачу</h3>
             <div className="mt-5 space-y-3">
               <input value={editing.title} onChange={(e)=>setEditing({...editing,title:e.target.value})} className="h-12 w-full rounded-2xl border border-line-strong px-4 outline-none focus:border-accent"/>
-              <div className="grid grid-cols-2 gap-3"><input type="date" value={editing.date} onChange={(e)=>setEditing({...editing,date:e.target.value})} className="h-11 rounded-2xl border border-line-strong px-3 outline-none"/><input type="time" value={editing.time||""} onChange={(e)=>setEditing({...editing,time:e.target.value})} className="h-11 rounded-2xl border border-line-strong px-3 outline-none"/></div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="col-span-2 text-[12px] text-ink-muted">
+                  Дата
+                  <input type="date" value={editing.date} onChange={(e)=>setEditing({...editing,date:e.target.value})} className="mt-1 h-11 w-full rounded-2xl border border-line-strong px-3 outline-none"/>
+                </label>
+                <label className="text-[12px] text-ink-muted">
+                  С
+                  <input type="time" value={editing.time||""} onChange={(e)=>setEditing({...editing,time:e.target.value})} className="mt-1 h-11 w-full rounded-2xl border border-line-strong px-3 outline-none"/>
+                </label>
+                <label className="text-[12px] text-ink-muted">
+                  До
+                  <input
+                    type="time"
+                    value={editing.endTime||""}
+                    onChange={(e)=>setEditing({...editing,endTime:e.target.value})}
+                    className={`mt-1 h-11 w-full rounded-2xl border px-3 outline-none ${
+                      editing.endTime && !rangeValid(editing.time || "", editing.endTime)
+                        ? "border-danger"
+                        : "border-line-strong"
+                    }`}
+                  />
+                </label>
+              </div>
               <select value={editing.priority||"normal"} onChange={(e)=>setEditing({...editing,priority:e.target.value as Priority})} className="h-11 w-full rounded-2xl border border-line-strong px-3 outline-none"><option value="high">Высокий приоритет</option><option value="normal">Средний приоритет</option><option value="low">Низкий приоритет</option></select>
             </div>
             <div className="mt-5 flex gap-3"><button type="button" onClick={()=>setEditing(null)} className="h-11 flex-1 rounded-2xl border border-line-strong">Отмена</button><button type="button" onClick={saveEditing} className="h-11 flex-1 rounded-2xl bg-accent font-medium text-white">Сохранить</button></div>

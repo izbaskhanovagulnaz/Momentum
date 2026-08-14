@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
-import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, Edit3, List, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, Edit3, List, Maximize2, Plus, Trash2, X } from "lucide-react";
 import DayTimeline from "../components/DayTimeline";
 import TopBar from "../components/TopBar";
 import { usePlanner } from "../PlannerContext";
 import type { Task } from "../types";
-import { localDate } from "../utils";
+import { formatTimeRange, localDate, timeToMinutes } from "../utils";
 
 function toDate(value: string) {
   return new Date(`${value}T12:00:00`);
@@ -34,8 +34,10 @@ export default function CalendarPage() {
   const [visibleMonth, setVisibleMonth] = useState(() => toDate(localDate()));
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [editing, setEditing] = useState<Task | null>(null);
   const [dayView, setDayView] = useState<"timeline" | "list">("timeline");
+  const [dayFullscreen, setDayFullscreen] = useState(false);
 
   const days = useMemo(() => buildMonth(visibleMonth), [visibleMonth]);
 
@@ -80,14 +82,55 @@ export default function CalendarPage() {
     setSelectedDate(today);
   };
 
-  const selectDay = (day: Date) => {
+  const selectDay = (day: Date, expand = false) => {
     const value = localDate(day);
     setSelectedDate(value);
 
     if (monthKey(day) !== currentMonth) {
       setVisibleMonth(new Date(day.getFullYear(), day.getMonth(), 1));
     }
+
+    // На широких экранах выбранный день сразу раскрывается во весь экран,
+    // чтобы часы не жались в узкую колонку справа.
+    if (expand) setDayFullscreen(true);
   };
+
+  const shiftDay = (delta: number) => {
+    const next = toDate(selectedDate);
+    next.setDate(next.getDate() + delta);
+    selectDay(next);
+  };
+
+  // Esc закрывает полноэкранный день, но только если сверху нет модалки задачи.
+  useEffect(() => {
+    if (!dayFullscreen || editing) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDayFullscreen(false);
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dayFullscreen, editing]);
+
+  useEffect(() => {
+    if (!dayFullscreen) return;
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [dayFullscreen]);
+
+  // Конец учитывается только вместе с началом и только если он позже него.
+  const rangeValid = (from: string, to: string) => {
+    const start = timeToMinutes(from);
+    const end = timeToMinutes(to);
+    return start !== null && end !== null && end > start;
+  };
+
+  const endInvalid = Boolean(endTime) && !rangeValid(time, endTime);
 
   const submit = () => {
     const value = title.trim();
@@ -97,11 +140,13 @@ export default function CalendarPage() {
       title: value,
       date: selectedDate,
       time: time || undefined,
+      endTime: rangeValid(time, endTime) ? endTime : undefined,
       priority: "normal",
     });
 
     setTitle("");
     setTime("");
+    setEndTime("");
   };
 
   const CalendarGrid = ({ mobile = false }: { mobile?: boolean }) => (
@@ -134,7 +179,7 @@ export default function CalendarPage() {
             <button
               key={value}
               type="button"
-              onClick={() => selectDay(day)}
+              onClick={() => selectDay(day, !mobile)}
               className={
                 mobile
                   ? `relative mx-auto flex h-11 w-11 flex-col items-center justify-center rounded-full text-[14px] transition active:scale-95 ${
@@ -194,23 +239,40 @@ export default function CalendarPage() {
         />
       </div>
 
-      <div className="mt-2 flex items-center gap-2 border-t border-line pt-3">
-        <Clock3 size={16} className="text-ink-muted" />
+      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+        <Clock3 size={16} className="shrink-0 text-ink-muted" />
         <input
           type="time"
           value={time}
           onChange={(event) => setTime(event.target.value)}
-          className="h-9 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface-subtle px-3 text-[12px] outline-none"
+          className="h-9 min-w-[92px] flex-1 rounded-xl border border-line-strong bg-surface-subtle px-3 text-[12px] outline-none"
+          aria-label="Начало задачи"
+        />
+        <span className="shrink-0 text-[12px] text-ink-muted">до</span>
+        <input
+          type="time"
+          value={endTime}
+          onChange={(event) => setEndTime(event.target.value)}
+          className={`h-9 min-w-[92px] flex-1 rounded-xl border bg-surface-subtle px-3 text-[12px] outline-none ${
+            endInvalid ? "border-danger" : "border-line-strong"
+          }`}
+          aria-label="Конец задачи"
         />
         <button
           type="button"
           onClick={submit}
           disabled={!title.trim()}
-          className="rounded-xl bg-accent px-4 py-2 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="shrink-0 rounded-xl bg-accent px-4 py-2 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           Добавить
         </button>
       </div>
+
+      {endInvalid && (
+        <p className="mt-2 text-[11px] text-danger">
+          Конец должен быть позже начала — иначе задача сохранится без интервала.
+        </p>
+      )}
     </div>
   );
 
@@ -248,7 +310,7 @@ export default function CalendarPage() {
                 {task.title}
               </p>
               <p className="mt-0.5 font-mono text-[11px] text-ink-muted">
-                {task.time || "Без времени"}
+                {formatTimeRange(task.time, task.endTime) || "Без времени"}
               </p>
             </div>
 
@@ -301,16 +363,18 @@ export default function CalendarPage() {
     </div>
   );
 
-  const dayBody =
+  const renderDayBody = (fill = false) =>
     dayView === "timeline" ? (
       <DayTimeline
+        fill={fill}
         date={selectedDate}
         tasks={selectedTasks}
-        onCreate={(value, slotTime) =>
+        onCreate={(value, slotTime, slotEnd) =>
           addTask({
             title: value,
             date: selectedDate,
             time: slotTime,
+            endTime: slotEnd,
             priority: "normal",
           })
         }
@@ -318,9 +382,13 @@ export default function CalendarPage() {
         onEdit={(task) => setEditing({ ...task })}
         onDelete={deleteTask}
       />
+    ) : fill ? (
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">{taskList}</div>
     ) : (
       taskList
     );
+
+  const dayBody = renderDayBody();
 
   return (
     <div>
@@ -449,7 +517,17 @@ export default function CalendarPage() {
                 {selectedLabel}
               </h3>
             </div>
-            <CalendarPlus size={22} className="text-accent" />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDayFullscreen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-white text-ink-muted hover:text-accent"
+                aria-label="Открыть день на весь экран"
+              >
+                <Maximize2 size={16} />
+              </button>
+              <CalendarPlus size={22} className="text-accent" />
+            </div>
           </div>
 
           {taskComposer}
@@ -468,6 +546,67 @@ export default function CalendarPage() {
           </div>
         </aside>
       </div>
+      {dayFullscreen && (
+        <div className="fixed inset-0 z-[100] hidden flex-col bg-surface-subtle md:flex">
+          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line-strong bg-white px-6 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => shiftDay(-1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-white hover:bg-surface-subtle"
+                  aria-label="Предыдущий день"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shiftDay(1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-white hover:bg-surface-subtle"
+                  aria-label="Следующий день"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-[12px] uppercase tracking-[0.12em] text-ink-muted">
+                  Выбранный день
+                </p>
+                <h3 className="mt-0.5 truncate capitalize text-[22px] font-semibold text-ink">
+                  {selectedLabel}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3">
+              {viewSwitch}
+              <button
+                type="button"
+                onClick={() => setDayFullscreen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-white text-ink-secondary hover:bg-surface-subtle"
+                aria-label="Закрыть день"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </header>
+
+          <div className="mx-auto flex min-h-0 w-full max-w-[1000px] flex-1 flex-col gap-4 px-6 py-5">
+            <div className="shrink-0">{taskComposer}</div>
+
+            <p className="shrink-0 text-[13px] font-medium text-ink">
+              Задачи дня
+              <span className="ml-2 text-[12px] text-ink-muted">
+                {selectedTasks.length}
+              </span>
+            </p>
+
+            {renderDayBody(true)}
+          </div>
+        </div>
+      )}
+
       {editing && (
         <div className="fixed inset-0 z-[110] grid place-items-center bg-black/30 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-line-strong bg-white p-5 shadow-2xl">
@@ -479,18 +618,37 @@ export default function CalendarPage() {
                 className="h-12 w-full rounded-2xl border border-line-strong px-4 outline-none focus:border-accent"
               />
               <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="date"
-                  value={editing.date}
-                  onChange={(event) => setEditing({ ...editing, date: event.target.value })}
-                  className="h-11 rounded-2xl border border-line-strong px-3 outline-none"
-                />
-                <input
-                  type="time"
-                  value={editing.time || ""}
-                  onChange={(event) => setEditing({ ...editing, time: event.target.value })}
-                  className="h-11 rounded-2xl border border-line-strong px-3 outline-none"
-                />
+                <label className="col-span-2 text-[12px] text-ink-muted">
+                  Дата
+                  <input
+                    type="date"
+                    value={editing.date}
+                    onChange={(event) => setEditing({ ...editing, date: event.target.value })}
+                    className="mt-1 h-11 w-full rounded-2xl border border-line-strong px-3 outline-none"
+                  />
+                </label>
+                <label className="text-[12px] text-ink-muted">
+                  С
+                  <input
+                    type="time"
+                    value={editing.time || ""}
+                    onChange={(event) => setEditing({ ...editing, time: event.target.value })}
+                    className="mt-1 h-11 w-full rounded-2xl border border-line-strong px-3 outline-none"
+                  />
+                </label>
+                <label className="text-[12px] text-ink-muted">
+                  До
+                  <input
+                    type="time"
+                    value={editing.endTime || ""}
+                    onChange={(event) => setEditing({ ...editing, endTime: event.target.value })}
+                    className={`mt-1 h-11 w-full rounded-2xl border px-3 outline-none ${
+                      editing.endTime && !rangeValid(editing.time || "", editing.endTime)
+                        ? "border-danger"
+                        : "border-line-strong"
+                    }`}
+                  />
+                </label>
               </div>
               <select
                 value={editing.priority || "normal"}
@@ -512,6 +670,9 @@ export default function CalendarPage() {
                     title: editing.title.trim(),
                     date: editing.date,
                     time: editing.time || undefined,
+                    endTime: rangeValid(editing.time || "", editing.endTime || "")
+                      ? editing.endTime
+                      : undefined,
                     priority: editing.priority || "normal",
                   });
                   setEditing(null);

@@ -18,7 +18,7 @@ import type {
   Task,
 } from "./types";
 import { normalizeGoal, recalculateGoal } from "./goalUtils";
-import { firestore, serverTimestamp } from "./firebase";
+import { deleteField, firestore, serverTimestamp } from "./firebase";
 import type { FirebaseCollectionRef, FirebaseDocumentRef } from "./firebase";
 import { useAuth } from "./AuthContext";
 import { clampMonthStartDay, localDate, salesPeriodFor } from "./utils";
@@ -265,11 +265,15 @@ function normalizeFinance(raw: Partial<FinanceState> & Record<string, unknown>):
   };
 }
 
+function normalizeClock(raw: unknown) {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  const normalized = /^\d{4}$/.test(value) ? `${value.slice(0, 2)}:${value.slice(2)}` : value;
+  return /^\d{2}:\d{2}$/.test(normalized) ? normalized : undefined;
+}
+
 function normalizeTask(raw: Partial<Task> & Record<string, unknown>, fallbackIndex: number): Task {
-  const rawTime = typeof raw.time === "string" ? raw.time.trim() : "";
-  const normalizedTime = /^\d{4}$/.test(rawTime)
-    ? `${rawTime.slice(0, 2)}:${rawTime.slice(2)}`
-    : rawTime;
+  const time = normalizeClock(raw.time);
+  const endTime = normalizeClock(raw.endTime);
   const priority = raw.priority === "high" || raw.priority === "normal" || raw.priority === "low"
     ? raw.priority
     : "normal";
@@ -279,7 +283,9 @@ function normalizeTask(raw: Partial<Task> & Record<string, unknown>, fallbackInd
     title: typeof raw.title === "string" ? raw.title : "",
     done: Boolean(raw.done),
     date: typeof raw.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : localDate(),
-    time: /^\d{2}:\d{2}$/.test(normalizedTime) ? normalizedTime : undefined,
+    time,
+    // Конец без начала или раньше начала смысла не имеет.
+    endTime: time && endTime && endTime > time ? endTime : undefined,
     priority,
   };
 }
@@ -408,7 +414,15 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     setSyncStatus("saving");
     try {
       const ref = collection.doc(id);
-      if (task) await ref.set({ ...task, updatedAt: serverTimestamp() }, { merge: true });
+      // Firestore не принимает undefined, а merge сам по себе не убирает
+      // очищенные поля (снятое время, снятый конец) — нужен явный сентинел.
+      if (task) {
+        const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
+        for (const [key, value] of Object.entries(task)) {
+          payload[key] = value === undefined ? deleteField() : value;
+        }
+        await ref.set(payload, { merge: true });
+      }
       else await ref.delete();
       setSyncStatus("synced");
     } catch (reason) {

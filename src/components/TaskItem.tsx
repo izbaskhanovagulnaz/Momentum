@@ -1,6 +1,7 @@
 import { Check, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Task } from "../types";
+import { formatTimeRange } from "../utils";
 
 interface TaskItemProps {
   task: Task;
@@ -39,7 +40,9 @@ export default function TaskItem({ task, onToggle, onDelete }: TaskItemProps) {
         </span>
       )}
       {task.time && !task.done && (
-        <span className="font-mono text-[11px] text-ink-muted">{task.time}</span>
+        <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-ink-muted">
+          {formatTimeRange(task.time, task.endTime)}
+        </span>
       )}
       {onDelete && (
         <button

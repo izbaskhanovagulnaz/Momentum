@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { financeTotals, formatMoneyInput, localDate, parseMoneyInput, salesPeriodFor } from "./utils";
+import {
+  financeTotals,
+  formatMoneyInput,
+  formatTimeRange,
+  localDate,
+  parseMoneyInput,
+  salesPeriodFor,
+  timeToMinutes,
+} from "./utils";
 import type { FinanceExpense, FinanceIncome } from "./types";
 
 describe("money input", () => {
@@ -23,6 +31,28 @@ describe("money input", () => {
   it("formats both decimal separators without changing their value", () => {
     expect(formatMoneyInput("1234.5")).toBe("1 234,5");
     expect(formatMoneyInput("1234,5")).toBe("1 234,5");
+  });
+});
+
+describe("task time ranges", () => {
+  it.each([
+    ["00:00", 0],
+    ["09:05", 545],
+    ["23:59", 1439],
+  ])("converts %s to minutes", (input, expected) => {
+    expect(timeToMinutes(input)).toBe(expected);
+  });
+
+  it.each([undefined, "", "9", "24:00", "10:60", "abc"])("rejects %s", (input) => {
+    expect(timeToMinutes(input)).toBeNull();
+  });
+
+  it("shows an interval only when the end is later than the start", () => {
+    expect(formatTimeRange("10:00", "11:30")).toBe("10:00 – 11:30");
+    expect(formatTimeRange("10:00", "10:00")).toBe("10:00");
+    expect(formatTimeRange("10:00", "09:00")).toBe("10:00");
+    expect(formatTimeRange("10:00")).toBe("10:00");
+    expect(formatTimeRange(undefined, "11:00")).toBe("");
   });
 });
 

@@ -3,7 +3,10 @@ export interface Task {
   title: string;
   done: boolean;
   date: string;
+  /** Начало задачи, HH:MM. */
   time?: string;
+  /** Конец задачи, HH:MM. Всегда позже `time`. */
+  endTime?: string;
   priority?: "high" | "normal" | "low";
 }
 

@@ -3,7 +3,7 @@ import { CheckCircle2, Pencil, RotateCcw, Trash2, Wallet, X } from "lucide-react
 import { useSearchParams } from "react-router-dom";
 import HeroCard from "../components/HeroCard";
 import { usePlanner } from "../PlannerContext";
-import type { Currency, FinanceExpense, FinanceIncome } from "../types";
+import type { Currency, FinanceExpense, FinanceIncome, FinanceOperationStatus } from "../types";
 import { formatMoneyInput, localDate, parseMoneyInput } from "../utils";
 
 const currencies: Currency[] = ["USD", "UZS", "RUB"];
@@ -25,11 +25,54 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
+// Списки операций идут по дате возрастания: ближайшие сверху.
+function byDateAsc<T extends { date: string }>(a: T, b: T) {
+  return a.date.localeCompare(b.date);
+}
+
+/** Сколько дней вперёд операция считается «ближайшей». */
+const SOON_DAYS = 3;
+
+type RowTone = "default" | "soon" | "overdue" | "done";
+
+const rowTone: Record<RowTone, string> = {
+  default: "border-transparent bg-surface-subtle",
+  soon: "border-warning bg-warning-soft",
+  overdue: "border-danger bg-danger-soft",
+  done: "border-transparent bg-surface-subtle opacity-60",
+};
+
+function shiftDate(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return localDate(date);
+}
+
 const operationStatusLabel = {
   planned: "ожидается",
   completed: "выполнено",
   cancelled: "отменено",
 };
+
+type Operation = { date: string; status?: FinanceOperationStatus };
+
+/**
+ * Оттенок незакрытой операции: дата прошла — красный, ближайшие дни — янтарный.
+ * Янтарь включаем только для расходов: у доходов «скоро придут» — не повод для внимания.
+ */
+function operationTone(item: Operation, today: string, highlightSoon: boolean): RowTone {
+  if (item.status === "completed") return "done";
+  if (item.status === "cancelled") return "default";
+  if (item.date < today) return "overdue";
+  if (!highlightSoon) return "default";
+  return item.date <= shiftDate(today, SOON_DAYS) ? "soon" : "default";
+}
+
+function operationStatusText(item: Operation, today: string, overdueLabel: string) {
+  const status = item.status || "planned";
+  if (status === "planned" && item.date < today) return overdueLabel;
+  return operationStatusLabel[status];
+}
 
 interface FinanceSummary {
   incomes: number;
@@ -76,6 +119,7 @@ export default function Finance() {
       setTab(requestedTab);
     }
   }, [searchParams]);
+  const today = localDate();
   const [incomeAmount, setIncomeAmount] = useState("");
   const [incomeCurrency, setIncomeCurrency] = useState<Currency>("UZS");
   const [incomeSource, setIncomeSource] = useState("Зарплата");
@@ -180,7 +224,7 @@ export default function Finance() {
       (expenseListCategory === "Все" || item.category === expenseListCategory)
       && (!expenseListDateFrom || item.date >= expenseListDateFrom)
       && (!expenseListDateTo || item.date <= expenseListDateTo)
-    ))
+    )).sort(byDateAsc)
   ), [expenseListCategory, expenseListDateFrom, expenseListDateTo, finance.expenses]);
 
   const visibleIncomes = useMemo(() => (
@@ -188,7 +232,7 @@ export default function Finance() {
       (incomeListSource === "Все" || item.source === incomeListSource)
       && (!incomeListDateFrom || item.date >= incomeListDateFrom)
       && (!incomeListDateTo || item.date <= incomeListDateTo)
-    ))
+    )).sort(byDateAsc)
   ), [finance.incomes, incomeListDateFrom, incomeListDateTo, incomeListSource]);
 
   const visibleExpensesTotal = useMemo(() => (
@@ -337,8 +381,9 @@ export default function Finance() {
             items={visibleExpenses.map((item) => ({
               id: item.id,
               title: item.category,
-              meta: `${item.date} · ${operationStatusLabel[item.status || "planned"]}`,
+              meta: `${item.date} · ${operationStatusText(item, today, "просрочено")}`,
               value: money(item.amount, item.currency),
+              tone: operationTone(item, today, true),
               onDelete: () => deleteFinanceExpense(item.id),
               actions: (
                 <>
@@ -363,8 +408,9 @@ export default function Finance() {
             items={visibleIncomes.map((item) => ({
               id: item.id,
               title: item.source,
-              meta: `${item.date} · ${operationStatusLabel[item.status || "planned"]}`,
+              meta: `${item.date} · ${operationStatusText(item, today, "не поступило")}`,
               value: money(item.amount, item.currency),
+              tone: operationTone(item, today, false),
               onDelete: () => deleteFinanceIncome(item.id),
               actions: (
                 <>
@@ -560,7 +606,7 @@ function List({
   title: string;
   total?: string;
   filter?: React.ReactNode;
-  items: Array<{ id: string; title: string; meta: string; value: string; onDelete: () => void; actions?: React.ReactNode }>;
+  items: Array<{ id: string; title: string; meta: string; value: string; tone?: RowTone; onDelete: () => void; actions?: React.ReactNode }>;
 }) {
   return (
     <Panel title={title}>
@@ -580,15 +626,24 @@ function List({
   );
 }
 
-function FinanceRows({ items }: { items: Array<{ id: string; title: string; meta: string; value: string; onDelete: () => void; actions?: React.ReactNode }> }) {
+function FinanceRows({ items }: { items: Array<{ id: string; title: string; meta: string; value: string; tone?: RowTone; onDelete: () => void; actions?: React.ReactNode }> }) {
   return (
     <div className="mt-4 flex flex-col gap-2 lg:mt-3">
       {items.length === 0 && <p className="neu-flat py-5 text-center text-[13px] text-ink-muted">Пока здесь пусто</p>}
       {items.map((item) => (
-        <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface-subtle px-4 py-3">
+        <div
+          key={item.id}
+          className={`flex flex-wrap items-center gap-3 rounded-2xl border-l-[3px] px-4 py-3 ${rowTone[item.tone || "default"]}`}
+        >
           <div className="min-w-[160px] flex-1">
             <p className="truncate text-[14px] font-medium text-ink">{item.title}</p>
-            <p className="text-[11px] text-ink-muted">{item.meta}</p>
+            <p
+              className={`text-[11px] ${
+                item.tone === "overdue" ? "font-medium text-danger" : "text-ink-muted"
+              }`}
+            >
+              {item.meta}
+            </p>
           </div>
           <strong className="ml-auto shrink-0 text-[13px] text-ink">{item.value}</strong>
           <div className="flex shrink-0 items-center gap-1.5">

@@ -19,7 +19,7 @@ interface FirebaseCompat {
     collection: (name: string) => {
       doc: (id: string) => FirebaseDocumentRef;
     };
-  }) & { FieldValue: { serverTimestamp: () => unknown } };
+  }) & { FieldValue: { serverTimestamp: () => unknown; delete: () => unknown } };
 }
 
 interface FirebaseDocumentSnapshot {
@@ -71,4 +71,6 @@ export const googleProvider = new window.firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 export const firestore = window.firebase.firestore();
 export const serverTimestamp = () => window.firebase.firestore.FieldValue.serverTimestamp();
+/** Сентинел для удаления поля при записи с merge. */
+export const deleteField = () => window.firebase.firestore.FieldValue.delete();
 export type { FirebaseUser };

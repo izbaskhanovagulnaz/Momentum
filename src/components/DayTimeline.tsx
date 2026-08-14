@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Edit3, Trash2, X } from "lucide-react";
 import type { Task } from "../types";
-import { localDate } from "../utils";
+import { formatTimeRange, localDate } from "../utils";
 
 const ROW_HEIGHT = 56;
 const SLOT_MINUTES = 60;
+const MIN_BLOCK_HEIGHT = 22;
+const DAY_MINUTES = 24 * 60;
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 
 function pad(value: number) {
@@ -18,17 +20,31 @@ function toMinutes(time?: string) {
   return Math.min(24 * 60 - 1, Math.max(0, hours * 60 + minutes));
 }
 
-interface Placed {
+interface Span {
   task: Task;
   start: number;
+  end: number;
+}
+
+interface Placed extends Span {
   column: number;
   columns: number;
 }
 
-function layoutTasks(items: { task: Task; start: number }[]): Placed[] {
-  const sorted = [...items].sort((a, b) => a.start - b.start);
+/** Конец задачи: явный `endTime`, иначе стандартный часовой слот. */
+function spanOf(task: Task, start: number): Span {
+  const rawEnd = toMinutes(task.endTime);
+  const end =
+    rawEnd !== null && rawEnd > start
+      ? Math.min(rawEnd, DAY_MINUTES)
+      : Math.min(start + SLOT_MINUTES, DAY_MINUTES);
+  return { task, start, end };
+}
+
+function layoutTasks(items: Span[]): Placed[] {
+  const sorted = [...items].sort((a, b) => a.start - b.start || a.end - b.end);
   const placed: Placed[] = [];
-  let cluster: { task: Task; start: number }[] = [];
+  let cluster: Span[] = [];
   let clusterEnd = -1;
 
   const flush = () => {
@@ -36,7 +52,7 @@ function layoutTasks(items: { task: Task; start: number }[]): Placed[] {
     const assigned = cluster.map((item) => {
       let column = columnEnds.findIndex((end) => end <= item.start);
       if (column === -1) column = columnEnds.length;
-      columnEnds[column] = item.start + SLOT_MINUTES;
+      columnEnds[column] = item.end;
       return { ...item, column };
     });
 
@@ -51,7 +67,7 @@ function layoutTasks(items: { task: Task; start: number }[]): Placed[] {
   for (const item of sorted) {
     if (cluster.length > 0 && item.start >= clusterEnd) flush();
     cluster.push(item);
-    clusterEnd = Math.max(clusterEnd, item.start + SLOT_MINUTES);
+    clusterEnd = Math.max(clusterEnd, item.end);
   }
   if (cluster.length > 0) flush();
 
@@ -68,10 +84,12 @@ function taskTone(task: Task) {
 interface DayTimelineProps {
   date: string;
   tasks: Task[];
-  onCreate: (title: string, time: string) => void;
+  onCreate: (title: string, time: string, endTime?: string) => void;
   onToggle: (id: string) => void;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
+  /** Растянуть сетку часов на всю высоту родителя вместо фиксированной. */
+  fill?: boolean;
 }
 
 export default function DayTimeline({
@@ -81,9 +99,11 @@ export default function DayTimeline({
   onToggle,
   onEdit,
   onDelete,
+  fill = false,
 }: DayTimelineProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [draftTime, setDraftTime] = useState<string | null>(null);
+  const [draftEnd, setDraftEnd] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
   const [nowMinutes, setNowMinutes] = useState(() => {
     const now = new Date();
@@ -102,7 +122,8 @@ export default function DayTimeline({
       layoutTasks(
         tasks
           .map((task) => ({ task, start: toMinutes(task.time) }))
-          .filter((item): item is { task: Task; start: number } => item.start !== null),
+          .filter((item): item is { task: Task; start: number } => item.start !== null)
+          .map((item) => spanOf(item.task, item.start)),
       ),
     [tasks],
   );
@@ -122,6 +143,7 @@ export default function DayTimeline({
 
   useEffect(() => {
     setDraftTime(null);
+    setDraftEnd("");
     setDraftTitle("");
 
     const container = scrollRef.current;
@@ -137,26 +159,60 @@ export default function DayTimeline({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
+  /** Конец на час позже начала, но не выходя за сутки. */
+  const defaultEndFor = (start: number) => {
+    const end = Math.min(start + SLOT_MINUTES, DAY_MINUTES - 1);
+    return `${pad(Math.floor(end / 60))}:${pad(end % 60)}`;
+  };
+
   const openDraft = (hour: number) => {
     setDraftTime(`${pad(hour)}:00`);
+    setDraftEnd(defaultEndFor(hour * 60));
     setDraftTitle("");
+  };
+
+  const changeDraftStart = (value: string) => {
+    setDraftTime(value);
+
+    // Конец подтягивается за началом, пока пользователь не задал его сам.
+    const start = toMinutes(value);
+    const end = toMinutes(draftEnd);
+    if (start !== null && (end === null || end <= start)) {
+      setDraftEnd(defaultEndFor(start));
+    }
   };
 
   const submitDraft = () => {
     const value = draftTitle.trim();
     if (!value || !draftTime) return;
 
-    onCreate(value, draftTime);
+    const start = toMinutes(draftTime);
+    const end = toMinutes(draftEnd);
+    onCreate(
+      value,
+      draftTime,
+      start !== null && end !== null && end > start ? draftEnd : undefined,
+    );
     setDraftTime(null);
+    setDraftEnd("");
     setDraftTitle("");
   };
 
   const draftMinutes = toMinutes(draftTime ?? undefined);
+  const draftEndMinutes = toMinutes(draftEnd);
+  const draftHeight =
+    draftMinutes !== null && draftEndMinutes !== null && draftEndMinutes > draftMinutes
+      ? Math.max(MIN_BLOCK_HEIGHT, ((draftEndMinutes - draftMinutes) / 60) * ROW_HEIGHT - 5)
+      : ROW_HEIGHT - 5;
 
   return (
-    <div>
+    <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
       {untimed.length > 0 && (
-        <div className="mb-3 rounded-2xl border border-line-strong bg-white p-3">
+        <div
+          className={`mb-3 rounded-2xl border border-line-strong bg-white p-3 ${
+            fill ? "shrink-0" : ""
+          }`}
+        >
           <p className="mb-2 text-[11px] uppercase tracking-[0.12em] text-ink-muted">
             Без времени
           </p>
@@ -206,7 +262,11 @@ export default function DayTimeline({
 
       <div
         ref={scrollRef}
-        className="max-h-[420px] overflow-y-auto rounded-2xl border border-line-strong bg-white px-3 py-2 md:max-h-[560px]"
+        className={`overflow-y-auto rounded-2xl border border-line-strong bg-white px-3 py-2 ${
+          fill
+            ? "min-h-0 flex-1"
+            : "max-h-[420px] md:max-h-[560px]"
+        }`}
       >
         <div
           className="relative"
@@ -240,12 +300,16 @@ export default function DayTimeline({
           </span>
 
           <div className="pointer-events-none absolute inset-y-0 left-14 right-1">
-            {placed.map(({ task, start, column, columns }) => {
-              const height = (SLOT_MINUTES / 60) * ROW_HEIGHT - 5;
+            {placed.map(({ task, start, end, column, columns }) => {
+              const height = Math.max(
+                MIN_BLOCK_HEIGHT,
+                ((end - start) / 60) * ROW_HEIGHT - 5,
+              );
               const top = Math.min(
                 (start / 60) * ROW_HEIGHT,
                 HOURS.length * ROW_HEIGHT - height,
               );
+              const compact = height < 40;
 
               return (
                 <div
@@ -277,7 +341,9 @@ export default function DayTimeline({
                     <button
                       type="button"
                       onClick={() => onEdit(task)}
-                      className="min-w-0 flex-1 text-left"
+                      className={`min-w-0 flex-1 text-left ${
+                        compact ? "flex items-baseline gap-2" : ""
+                      }`}
                     >
                       <p
                         className={`truncate text-[13px] font-medium ${
@@ -286,8 +352,12 @@ export default function DayTimeline({
                       >
                         {task.title}
                       </p>
-                      <p className="truncate font-mono text-[10px] text-ink-secondary">
-                        {task.time}
+                      <p
+                        className={`truncate font-mono text-[10px] text-ink-secondary ${
+                          compact ? "shrink-0" : ""
+                        }`}
+                      >
+                        {formatTimeRange(task.time, task.endTime)}
                       </p>
                     </button>
 
@@ -311,17 +381,26 @@ export default function DayTimeline({
               style={{
                 top: Math.min(
                   (draftMinutes / 60) * ROW_HEIGHT + 2,
-                  HOURS.length * ROW_HEIGHT - ROW_HEIGHT + 2,
+                  HOURS.length * ROW_HEIGHT - draftHeight + 2,
                 ),
-                height: ROW_HEIGHT - 5,
+                height: Math.max(draftHeight, ROW_HEIGHT - 5),
               }}
             >
               <div className="flex h-full items-center gap-2 rounded-xl border border-accent bg-white px-2 shadow-md">
                 <input
                   type="time"
                   value={draftTime}
-                  onChange={(event) => setDraftTime(event.target.value)}
+                  onChange={(event) => changeDraftStart(event.target.value)}
                   className="h-7 w-[86px] shrink-0 rounded-lg border border-line-strong bg-surface-subtle px-1 text-[11px] outline-none"
+                  aria-label="Начало задачи"
+                />
+                <span className="shrink-0 text-[11px] text-ink-muted">–</span>
+                <input
+                  type="time"
+                  value={draftEnd}
+                  onChange={(event) => setDraftEnd(event.target.value)}
+                  className="h-7 w-[86px] shrink-0 rounded-lg border border-line-strong bg-surface-subtle px-1 text-[11px] outline-none"
+                  aria-label="Конец задачи"
                 />
                 <input
                   autoFocus

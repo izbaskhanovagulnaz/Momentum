@@ -18,6 +18,30 @@ body,
   --shadow-neu-sm: 6px 6px 14px rgba(163, 168, 200, 0.3), -6px -6px 12px rgba(255, 255, 255, 0.8);
   --shadow-neu-inset: inset 4px 4px 10px rgba(163, 168, 200, 0.28), inset -4px -4px 10px rgba(255, 255, 255, 0.75);
   --shadow-neu-pressed: inset 3px 3px 8px rgba(163, 168, 200, 0.35), inset -3px -3px 8px rgba(255, 255, 255, 0.6);
+
+  /* Liquid glass material — thin and transparent, the backdrop does the work */
+  --glass-bg: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.44) 0%,
+    rgba(255, 255, 255, 0.26) 50%,
+    rgba(255, 255, 255, 0.36) 100%
+  );
+  --glass-blur: 32px;
+  --glass-sat: 190%;
+  --glass-bright: 1.08;
+  --glass-sheen: 0.55;
+  --glass-rim: 0.95;
+  --glass-shadow: 0 22px 45px -16px rgba(58, 62, 110, 0.4), 0 6px 16px -8px rgba(58, 62, 110, 0.22),
+    inset 0 -6px 18px -10px rgba(255, 255, 255, 0.9);
+
+  --lens-bg: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.62) 55%,
+    rgba(255, 255, 255, 0.78) 100%
+  );
+  --lens-rim: 1;
+  --lens-shadow: 0 8px 18px -10px rgba(58, 62, 110, 0.55), inset 0 -5px 12px -6px rgba(255, 255, 255, 1);
 }
 
 body {
@@ -35,6 +59,26 @@ body {
   --shadow-neu-sm: 6px 6px 14px rgba(0, 0, 0, 0.5), -6px -6px 12px rgba(255, 255, 255, 0.025);
   --shadow-neu-inset: inset 4px 4px 10px rgba(0, 0, 0, 0.5), inset -4px -4px 10px rgba(255, 255, 255, 0.02);
   --shadow-neu-pressed: inset 3px 3px 8px rgba(0, 0, 0, 0.55), inset -3px -3px 8px rgba(255, 255, 255, 0.02);
+
+  --glass-bg: linear-gradient(
+    145deg,
+    rgba(86, 82, 128, 0.42) 0%,
+    rgba(34, 31, 54, 0.34) 50%,
+    rgba(58, 54, 90, 0.4) 100%
+  );
+  --glass-sheen: 0.14;
+  --glass-rim: 0.34;
+  --glass-shadow: 0 22px 48px -16px rgba(0, 0, 0, 0.75), 0 6px 16px -8px rgba(0, 0, 0, 0.5),
+    inset 0 -6px 18px -10px rgba(255, 255, 255, 0.12);
+
+  --lens-bg: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.08) 55%,
+    rgba(255, 255, 255, 0.14) 100%
+  );
+  --lens-rim: 0.42;
+  --lens-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8), inset 0 -5px 12px -6px rgba(255, 255, 255, 0.16);
 }
 
 :root[data-theme="dark"] .bg-white,
@@ -56,6 +100,10 @@ body {
 
 :root[data-theme="dark"] .bg-danger-soft {
   background-color: rgba(244, 104, 95, 0.16);
+}
+
+:root[data-theme="dark"] .bg-warning-soft {
+  background-color: rgba(246, 169, 79, 0.16);
 }
 
 :root[data-theme="dark"] .text-ink {
@@ -156,5 +204,119 @@ body {
 
   .neu-input:focus {
     box-shadow: var(--shadow-neu-inset), 0 0 0 2px theme("colors.accent.DEFAULT");
+  }
+
+  /* ================= Liquid Glass ==================
+     Three stacked layers, the way Apple's material reads:
+     1. the pane itself  — blurred, saturated, brightened backdrop
+     2. ::before         — specular sheen (sits under the content)
+     3. ::after          — 1px refractive rim drawn with a masked
+                           gradient, painted over everything
+     ================================================= */
+  .glass {
+    position: relative;
+    background: var(--glass-bg);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat))
+      brightness(var(--glass-bright));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat))
+      brightness(var(--glass-bright));
+  }
+
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+        120% 90% at 30% -30%,
+        rgba(255, 255, 255, var(--glass-sheen)) 0%,
+        rgba(255, 255, 255, 0) 60%
+      ),
+      radial-gradient(
+        90% 70% at 80% 130%,
+        rgba(255, 255, 255, calc(var(--glass-sheen) * 0.6)) 0%,
+        rgba(255, 255, 255, 0) 55%
+      );
+  }
+
+  /* Light bends at the edge: bright top-left and bottom-right, dim sides */
+  .glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, var(--glass-rim)) 0%,
+      rgba(255, 255, 255, calc(var(--glass-rim) * 0.25)) 28%,
+      rgba(255, 255, 255, 0) 48%,
+      rgba(255, 255, 255, calc(var(--glass-rim) * 0.2)) 62%,
+      rgba(255, 255, 255, calc(var(--glass-rim) * 0.85)) 100%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  /* Content has to opt into the layer above the sheen */
+  .glass-layer {
+    position: relative;
+    z-index: 10;
+  }
+
+  /* The moving selection lens — denser glass, reads as a thicker bubble */
+  .glass-lens {
+    position: relative;
+    background: var(--lens-bg);
+    box-shadow: var(--lens-shadow);
+    -webkit-backdrop-filter: blur(6px) saturate(160%) brightness(1.12);
+    backdrop-filter: blur(6px) saturate(160%) brightness(1.12);
+  }
+
+  .glass-lens::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      150deg,
+      rgba(255, 255, 255, var(--lens-rim)) 0%,
+      rgba(255, 255, 255, calc(var(--lens-rim) * 0.2)) 45%,
+      rgba(255, 255, 255, calc(var(--lens-rim) * 0.55)) 100%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  .glass-press {
+    @apply transition-transform duration-200 ease-out active:scale-[0.94];
+  }
+}
+
+/* Devices without backdrop-filter get a solid, still-legible surface */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: rgba(255, 255, 255, 0.94);
+  }
+
+  :root[data-theme="dark"] .glass {
+    background: rgba(33, 29, 51, 0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-press {
+    transition: none;
   }
 }

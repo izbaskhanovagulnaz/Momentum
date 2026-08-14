@@ -15,7 +15,7 @@ import { useAuth } from "../AuthContext";
 import QuickNote from "../components/QuickNote";
 import { usePlanner } from "../PlannerContext";
 import type { Currency, FinanceExpense, FinanceIncome, Task } from "../types";
-import { localDate } from "../utils";
+import { formatTimeRange, localDate } from "../utils";
 
 function money(value: number, currency: Currency = "UZS") {
   return new Intl.NumberFormat("ru-RU", {
@@ -190,7 +190,7 @@ export default function Home() {
                     {nextTask.title}
                   </p>
                   <p className="mt-3 font-mono text-[13px] text-ink-secondary">
-                    {nextTask.time || "без времени"}
+                    {formatTimeRange(nextTask.time, nextTask.endTime) || "без времени"}
                   </p>
                 </>
               ) : (
@@ -292,8 +292,13 @@ export default function Home() {
                 >
                   <Check size={14} />
                 </button>
-                <span className="w-14 shrink-0 font-mono text-[12px] text-ink-muted">
+                <span className="w-14 shrink-0 font-mono text-[12px] leading-tight text-ink-muted">
                   {task.time || "--:--"}
+                  {task.time && task.endTime && (
+                    <span className="block text-[10px] text-ink-muted/70">
+                      –{task.endTime}
+                    </span>
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className={`truncate text-[15px] ${task.done ? "text-ink-muted line-through" : "text-ink"}`}>
