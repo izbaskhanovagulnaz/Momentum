@@ -95,6 +95,10 @@ const TYPE_ICONS: Record<GoalTrackingType, typeof TrendingUp> = {
 
 const UNIT_PRESETS = ["$", "₽", "сум", "кг", "%", "книг", "клиентов", "тренировок", "км", "уроков"];
 
+// Must match the limit enforced in PlannerContext's addGoalPhoto — keeping
+// these in sync avoids the UI promising more photos than the store allows.
+const GOAL_GALLERY_LIMIT = 5;
+
 function formatDate(value?: string) {
   if (!value) return "Без даты";
   return new Intl.DateTimeFormat("ru-RU", {
@@ -217,7 +221,7 @@ export default function Goals() {
     addGoal,
     updateGoal,
     deleteGoal,
-    reorderGoals,
+    setGoalsOrder,
     addGoalEntry,
     updateGoalEntry,
     deleteGoalEntry,
@@ -246,6 +250,11 @@ export default function Goals() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
   const [dragOverGoalId, setDragOverGoalId] = useState<string | null>(null);
+  const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
+  // Live preview of the full goal order while dragging — cards reflow into
+  // their new slots in real time instead of only highlighting a target and
+  // jumping into place on drop.
+  const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const pointerDragRef = useRef<{
     pointerId: number;
     sourceId: string;
@@ -254,6 +263,21 @@ export default function Goals() {
     startY: number;
     active: boolean;
   } | null>(null);
+  const previewOrderRef = useRef<string[] | null>(null);
+  const goalIdsRef = useRef<string[]>([]);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const autoScrollSpeedRef = useRef(0);
+  // setGoalsOrder comes from context and gets a new identity whenever any
+  // planner state changes; keep the latest one in a ref so the drag
+  // listeners below can be registered once and never miss a pointerup
+  // mid-drag because the effect re-subscribed.
+  const setGoalsOrderRef = useRef(setGoalsOrder);
+  useEffect(() => {
+    setGoalsOrderRef.current = setGoalsOrder;
+  }, [setGoalsOrder]);
+  useEffect(() => {
+    goalIdsRef.current = goals.map((goal) => goal.id);
+  }, [goals]);
 
   const detailGoal = goals.find((goal) => goal.id === detailGoalId) ?? null;
   const editingGoal = goals.find((goal) => goal.id === editingGoalId) ?? null;
@@ -270,19 +294,79 @@ export default function Goals() {
     );
   }, [goals]);
 
-  const visibleGoals = useMemo(() => {
-    if (filter === "completed") return goals.filter((goal) => isGoalCompleted(goal));
-    if (filter === "active") return goals.filter((goal) => !isGoalCompleted(goal));
-    return goals;
-  }, [filter, goals]);
+  // While dragging, render goals in the live preview order so the list
+  // visibly reflows as the card passes over its neighbours.
+  const displayGoals = useMemo(() => {
+    if (!previewOrder) return goals;
+    const byId = new Map(goals.map((goal) => [goal.id, goal]));
+    const ordered = previewOrder.map((id) => byId.get(id)).filter((goal): goal is Goal => Boolean(goal));
+    const seen = new Set(ordered.map((goal) => goal.id));
+    const missing = goals.filter((goal) => !seen.has(goal.id));
+    return [...ordered, ...missing];
+  }, [previewOrder, goals]);
 
-  const finishGoalReorder = (sourceId?: string | null, targetId?: string | null) => {
-    if (sourceId && targetId && sourceId !== targetId) {
-      reorderGoals(sourceId, targetId);
+  const visibleGoals = useMemo(() => {
+    if (filter === "completed") return displayGoals.filter((goal) => isGoalCompleted(goal));
+    if (filter === "active") return displayGoals.filter((goal) => !isGoalCompleted(goal));
+    return displayGoals;
+  }, [filter, displayGoals]);
+
+  const stopAutoScroll = () => {
+    if (autoScrollFrameRef.current != null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
     }
+    autoScrollSpeedRef.current = 0;
+  };
+
+  const runAutoScroll = () => {
+    if (autoScrollSpeedRef.current === 0) {
+      autoScrollFrameRef.current = null;
+      return;
+    }
+    window.scrollBy(0, autoScrollSpeedRef.current);
+    autoScrollFrameRef.current = requestAnimationFrame(runAutoScroll);
+  };
+
+  // Scroll the page while dragging near the top/bottom edge — without this,
+  // a long goal list is impossible to reorder past whatever fits on screen.
+  const updateAutoScroll = (clientY: number) => {
+    const edge = 90;
+    const viewportHeight = window.innerHeight;
+    let speed = 0;
+    if (clientY < edge) speed = -Math.round((edge - clientY) / 3) - 4;
+    else if (clientY > viewportHeight - edge) speed = Math.round((clientY - (viewportHeight - edge)) / 3) + 4;
+
+    autoScrollSpeedRef.current = speed;
+    if (speed !== 0 && autoScrollFrameRef.current == null) {
+      autoScrollFrameRef.current = requestAnimationFrame(runAutoScroll);
+    }
+  };
+
+  const moveInPreview = (order: string[], sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return order;
+    const from = order.indexOf(sourceId);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return order;
+    const next = [...order];
+    next.splice(from, 1);
+    next.splice(to, 0, sourceId);
+    return next;
+  };
+
+  const finishGoalReorder = () => {
+    const finalOrder = previewOrderRef.current;
+    const original = goalIdsRef.current;
+    if (finalOrder && finalOrder.some((id, index) => id !== original[index])) {
+      setGoalsOrderRef.current(finalOrder);
+    }
+    previewOrderRef.current = null;
+    setPreviewOrder(null);
     setDraggingGoalId(null);
     setDragOverGoalId(null);
+    setDragDelta({ x: 0, y: 0 });
     pointerDragRef.current = null;
+    stopAutoScroll();
     document.body.style.userSelect = "";
     document.body.style.cursor = "";
   };
@@ -307,7 +391,10 @@ export default function Goals() {
 
     document.body.style.userSelect = "none";
     document.body.style.cursor = "grabbing";
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    // Capturing on the handle itself is what made drags flaky: once
+    // captured, some mobile browsers stop delivering the pointermove
+    // stream reliably if the finger leaves the handle's own bounds. Track
+    // the drag globally on window instead and never capture.
   };
 
   useEffect(() => {
@@ -324,12 +411,21 @@ export default function Goals() {
 
       if (!drag.active) {
         drag.active = true;
+        previewOrderRef.current = [...goalIdsRef.current];
+        setPreviewOrder(previewOrderRef.current);
         setDraggingGoalId(drag.sourceId);
         setDragOverGoalId(drag.sourceId);
       }
 
       event.preventDefault();
+      setDragDelta({ x: event.clientX - drag.startX, y: event.clientY - drag.startY });
+      updateAutoScroll(event.clientY);
 
+      // The dragged card visually follows the pointer and would otherwise
+      // be the topmost element under it, making elementFromPoint report
+      // itself instead of the card underneath — it's given
+      // pointer-events:none in the render below specifically so this hit
+      // test sees the card being dragged over.
       const element = document.elementFromPoint(
         event.clientX,
         event.clientY,
@@ -337,9 +433,18 @@ export default function Goals() {
       const card = element?.closest<HTMLElement>("[data-goal-id]");
       const targetId = card?.dataset.goalId;
 
-      if (targetId && targetId !== drag.targetId) {
+      if (targetId && targetId !== drag.targetId && previewOrderRef.current) {
         drag.targetId = targetId;
         setDragOverGoalId(targetId);
+        previewOrderRef.current = moveInPreview(previewOrderRef.current, drag.sourceId, targetId);
+        setPreviewOrder(previewOrderRef.current);
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          try {
+            navigator.vibrate(8);
+          } catch {
+            // vibration is a nice-to-have; ignore unsupported/blocked calls
+          }
+        }
       }
     };
 
@@ -347,12 +452,8 @@ export default function Goals() {
       const drag = pointerDragRef.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
 
-      if (drag.active) {
-        event.preventDefault();
-        finishGoalReorder(drag.sourceId, drag.targetId);
-      } else {
-        finishGoalReorder();
-      }
+      if (drag.active) event.preventDefault();
+      finishGoalReorder();
     };
 
     window.addEventListener("pointermove", onPointerMove, { passive: false });
@@ -365,8 +466,11 @@ export default function Goals() {
       window.removeEventListener("pointercancel", onPointerEnd);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      stopAutoScroll();
     };
-  }, [reorderGoals]);
+    // Registered once — setGoalsOrderRef/goalIdsRef always hold the latest
+    // values, so this never needs to re-subscribe mid-drag.
+  }, []);
 
   const openCreate = () => {
     setEditingGoalId(null);
@@ -401,13 +505,19 @@ export default function Goals() {
   };
 
   const changeTrackingType = (trackingType: GoalTrackingType) => {
-    setForm((current) => ({
-      ...current,
-      trackingType,
-      startValue: trackingType === "checklist" ? 0 : current.startValue,
-      targetValue: trackingType === "checklist" ? 0 : Math.max(1, current.targetValue || 1),
-      unit: unitSuggestion(trackingType),
-    }));
+    setForm((current) => {
+      if (current.trackingType === trackingType) return current;
+      // Values from one tracking type rarely make sense for another
+      // (e.g. a 100→90 measurement goal becoming an "accumulative" goal
+      // that's instantly >100% done) — reset to sane defaults on switch.
+      return {
+        ...current,
+        trackingType,
+        startValue: 0,
+        targetValue: trackingType === "checklist" ? 0 : 100,
+        unit: unitSuggestion(trackingType),
+      };
+    });
   };
 
   const saveGoal = () => {
@@ -556,6 +666,7 @@ export default function Goals() {
 
   const savePhoto = () => {
     if (!photoEditor || !photoEditor.dataUrl || !photoEditor.date) return;
+    const goal = goals.find((item) => item.id === photoEditor.goalId);
     if (photoEditor.photoId) {
       updateGoalPhoto(
         photoEditor.goalId,
@@ -564,14 +675,25 @@ export default function Goals() {
         photoEditor.date,
         photoEditor.caption,
       );
-    } else {
-      addGoalPhoto(
-        photoEditor.goalId,
-        photoEditor.dataUrl,
-        photoEditor.date,
-        photoEditor.caption,
-      );
+      setPhotoEditor(null);
+      return;
     }
+
+    if (goal && goal.gallery.length >= GOAL_GALLERY_LIMIT) {
+      setPhotoEditor((current) =>
+        current
+          ? { ...current, error: `Достигнут лимит в ${GOAL_GALLERY_LIMIT} фото. Удали старое, чтобы добавить новое.` }
+          : current,
+      );
+      return;
+    }
+
+    addGoalPhoto(
+      photoEditor.goalId,
+      photoEditor.dataUrl,
+      photoEditor.date,
+      photoEditor.caption,
+    );
     setPhotoEditor(null);
   };
 
@@ -685,21 +807,28 @@ export default function Goals() {
             const cover = goalCover(goal);
             const latestPhoto = latestGoalPhoto(goal);
 
+            const isDragging = draggingGoalId === goal.id;
+
             return (
               <article
                 key={goal.id}
                 data-goal-id={goal.id}
-                className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition ${
-                  draggingGoalId === goal.id ? "scale-[0.98] opacity-55" : "hover:-translate-y-0.5 hover:shadow-md"
-                } ${dragOverGoalId === goal.id && draggingGoalId !== goal.id ? "border-accent ring-2 ring-accent/20" : "border-line-strong"}`}
+                className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm ${
+                  isDragging
+                    ? "pointer-events-none z-40 scale-[1.03] shadow-xl transition-none"
+                    : "transition hover:-translate-y-0.5 hover:shadow-md"
+                } ${dragOverGoalId === goal.id && !isDragging ? "border-accent ring-2 ring-accent/20" : "border-line-strong"}`}
+                style={isDragging ? { transform: `translate3d(${dragDelta.x}px, ${dragDelta.y}px, 0) scale(1.03)` } : undefined}
               >
                 <button
                   type="button"
                   onPointerDown={(event) => startPointerReorder(event, goal.id)}
                   onClick={(event) => event.stopPropagation()}
-                  className="absolute right-3 top-3 z-30 flex h-10 w-10 touch-none select-none items-center justify-center rounded-2xl bg-white/95 text-ink shadow-md backdrop-blur cursor-grab active:cursor-grabbing active:scale-95"
+                  onContextMenu={(event) => event.preventDefault()}
+                  style={{ WebkitTouchCallout: "none" }}
+                  className="absolute right-3 top-3 z-30 flex h-11 w-11 touch-none select-none items-center justify-center rounded-2xl bg-white/95 text-ink shadow-md backdrop-blur cursor-grab active:cursor-grabbing active:scale-95"
                   aria-label="Перетащить цель"
-                  title="Перетащить цель"
+                  title="Зажми и перетащи, чтобы изменить порядок"
                 >
                   <GripVertical size={20} />
                 </button>
@@ -805,14 +934,23 @@ export default function Goals() {
           onDelete={() => confirmDeleteGoal(detailGoal)}
           onAddProgress={() => openEntryEditor(detailGoal)}
           onEditEntry={(entry) => openEntryEditor(detailGoal, entry)}
-          onDeleteEntry={(entry) => deleteGoalEntry(detailGoal.id, entry.id)}
+          onDeleteEntry={(entry) => {
+            if (!window.confirm("Удалить эту запись прогресса?")) return;
+            deleteGoalEntry(detailGoal.id, entry.id);
+          }}
           onAddChecklistItem={() => openChecklistEditor(detailGoal)}
           onEditChecklistItem={(item) => openChecklistEditor(detailGoal, item)}
           onToggleChecklistItem={(item) => toggleGoalChecklistItem(detailGoal.id, item.id)}
-          onDeleteChecklistItem={(item) => deleteGoalChecklistItem(detailGoal.id, item.id)}
+          onDeleteChecklistItem={(item) => {
+            if (!window.confirm(`Удалить этап «${item.title}»?`)) return;
+            deleteGoalChecklistItem(detailGoal.id, item.id);
+          }}
           onAddPhoto={() => openPhotoEditor(detailGoal)}
           onEditPhoto={(photo) => openPhotoEditor(detailGoal, photo)}
-          onDeletePhoto={(photo) => deleteGoalPhoto(detailGoal.id, photo.id)}
+          onDeletePhoto={(photo) => {
+            if (!window.confirm("Удалить это фото?")) return;
+            deleteGoalPhoto(detailGoal.id, photo.id);
+          }}
         />
       )}
 
@@ -1029,9 +1167,9 @@ function GoalDetailSheet({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[15px] font-semibold text-ink">Галерея прогресса</p>
-                <p className="mt-0.5 text-[11px] text-ink-muted">До 8 фотографий с датой и подписью</p>
+                <p className="mt-0.5 text-[11px] text-ink-muted">До {GOAL_GALLERY_LIMIT} фотографий с датой и подписью</p>
               </div>
-              <button type="button" onClick={onAddPhoto} disabled={goal.gallery.length >= 8} className="flex h-10 items-center gap-2 rounded-2xl bg-ink px-3 text-[12px] font-medium text-white disabled:opacity-40"><ImagePlus size={16} /> Фото</button>
+              <button type="button" onClick={onAddPhoto} disabled={goal.gallery.length >= GOAL_GALLERY_LIMIT} className="flex h-10 items-center gap-2 rounded-2xl bg-ink px-3 text-[12px] font-medium text-white disabled:opacity-40"><ImagePlus size={16} /> Фото</button>
             </div>
 
             {photos.length === 0 ? (

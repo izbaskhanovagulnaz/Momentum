@@ -66,6 +66,7 @@ interface PlannerContextValue {
   ) => void;
   deleteGoal: (id: string) => void;
   reorderGoals: (sourceId: string, targetId: string) => void;
+  setGoalsOrder: (orderedIds: string[]) => void;
   addGoalEntry: (goalId: string, value: number, date: string, note?: string) => void;
   updateGoalEntry: (
     goalId: string,
@@ -335,6 +336,47 @@ export function PlannerProvider({ children }: PropsWithChildren) {
     goalsRef.current = next;
     setGoals(next);
   };
+
+  const goalsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goalsSavePendingRef = useRef<Goal[] | null>(null);
+
+  const flushGoalsSave = () => {
+    if (goalsSaveTimerRef.current) {
+      clearTimeout(goalsSaveTimerRef.current);
+      goalsSaveTimerRef.current = null;
+    }
+    const pending = goalsSavePendingRef.current;
+    if (pending) {
+      goalsSavePendingRef.current = null;
+      void persistField("goals", pending);
+    }
+  };
+
+  // Goal edits (checklist toggles, entries, photos...) can fire in quick
+  // succession — debounce the Firestore write instead of re-uploading the
+  // whole goals array (incl. base64 photos) on every single change.
+  const schedulePersistGoals = (next: Goal[]) => {
+    goalsSavePendingRef.current = next;
+    if (goalsSaveTimerRef.current) clearTimeout(goalsSaveTimerRef.current);
+    goalsSaveTimerRef.current = setTimeout(() => {
+      goalsSaveTimerRef.current = null;
+      const pending = goalsSavePendingRef.current;
+      goalsSavePendingRef.current = null;
+      if (pending) void persistField("goals", pending);
+    }, 600);
+  };
+
+  useEffect(() => {
+    const onBeforeUnload = () => flushGoalsSave();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("visibilitychange", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("visibilitychange", onBeforeUnload);
+      flushGoalsSave();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const persistField = async <K extends "notes" | "salesPlan" | "finance" | "goals">(
     field: K,
@@ -914,7 +956,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       });
       const nextGoals = [nextGoal, ...goalsRef.current];
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
       return goalId;
     },
 
@@ -923,13 +965,13 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         goal.id === id ? recalculateGoal({ ...goal, ...input }) : goal,
       );
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     deleteGoal: (id) => {
       const nextGoals = goalsRef.current.filter((goal) => goal.id !== id);
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     reorderGoals: (sourceId, targetId) => {
@@ -942,7 +984,23 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       const [moved] = current.splice(sourceIndex, 1);
       current.splice(targetIndex, 0, moved);
       applyGoals(current);
-      void persistField("goals", current);
+      schedulePersistGoals(current);
+    },
+
+    // Commits a full drag-reorder in one shot instead of one write per hop
+    // over intermediate cards. Any goal id missing from `orderedIds` (e.g.
+    // one that arrived via sync mid-drag) is appended at the end so nothing
+    // is silently dropped from the list.
+    setGoalsOrder: (orderedIds) => {
+      const byId = new Map(goalsRef.current.map((goal) => [goal.id, goal]));
+      const ordered = orderedIds
+        .map((id) => byId.get(id))
+        .filter((goal): goal is Goal => Boolean(goal));
+      const seen = new Set(ordered.map((goal) => goal.id));
+      const missing = goalsRef.current.filter((goal) => !seen.has(goal.id));
+      const next = [...ordered, ...missing];
+      applyGoals(next);
+      schedulePersistGoals(next);
     },
 
     addGoalEntry: (goalId, entryValue, date, note) => {
@@ -960,7 +1018,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         return recalculateGoal({ ...goal, entries: [...goal.entries, entry] });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     updateGoalEntry: (goalId, entryId, entryValue, date, note) => {
@@ -976,7 +1034,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         return recalculateGoal({ ...goal, entries });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     deleteGoalEntry: (goalId, entryId) => {
@@ -988,7 +1046,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     addGoalChecklistItem: (goalId, title) => {
@@ -1011,7 +1069,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     updateGoalChecklistItem: (goalId, itemId, title) => {
@@ -1027,7 +1085,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     toggleGoalChecklistItem: (goalId, itemId) => {
@@ -1047,7 +1105,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     deleteGoalChecklistItem: (goalId, itemId) => {
@@ -1059,7 +1117,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         });
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     addGoalPhoto: (goalId, dataUrl, date, caption) => {
@@ -1079,7 +1137,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         };
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     updateGoalPhoto: (goalId, photoId, dataUrl, date, caption) => {
@@ -1098,7 +1156,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         };
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
 
     deleteGoalPhoto: (goalId, photoId) => {
@@ -1120,7 +1178,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
         };
       });
       applyGoals(nextGoals);
-      void persistField("goals", nextGoals);
+      schedulePersistGoals(nextGoals);
     },
   }), [tasks, notes, salesPlan, finance, goals, loading, syncStatus]);
 
