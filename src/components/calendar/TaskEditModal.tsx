@@ -14,6 +14,11 @@ interface TaskEditModalProps {
   onSave: (patch: Partial<Omit<Task, "id">>) => void;
   onDelete: () => void;
   onClose: () => void;
+  /**
+   * Ставить курсор в название при открытии. На телефоне выключено: открыть
+   * задачу — это ещё не намерение печатать, а клавиатура закрывает пол-экрана.
+   */
+  autoFocusTitle?: boolean;
 }
 
 const PRIORITIES: { value: NonNullable<Task["priority"]>; label: string; tone: string }[] = [
@@ -22,7 +27,13 @@ const PRIORITIES: { value: NonNullable<Task["priority"]>; label: string; tone: s
   { value: "low", label: "Низкий", tone: "bg-sky-soft text-sky border-sky" },
 ];
 
-export default function TaskEditModal({ occurrence, onSave, onDelete, onClose }: TaskEditModalProps) {
+export default function TaskEditModal({
+  occurrence,
+  onSave,
+  onDelete,
+  onClose,
+  autoFocusTitle = false,
+}: TaskEditModalProps) {
   const [title, setTitle] = useState(occurrence.title);
   // У серии редактируется её начало, иначе сохранение одного вхождения
   // сдвинуло бы всю серию на его дату.
@@ -96,7 +107,7 @@ export default function TaskEditModal({ occurrence, onSave, onDelete, onClose }:
 
         <div className="space-y-3">
           <input
-            autoFocus
+            autoFocus={autoFocusTitle}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             onKeyDown={(event) => {

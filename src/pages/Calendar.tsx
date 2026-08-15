@@ -495,7 +495,7 @@ export default function CalendarPage() {
   const mobileComposer = (
     <button
       type="button"
-      onClick={() => setSheet(defaultSheetDraft())}
+      onClick={() => setSheet({ ...defaultSheetDraft(), focusTitle: true })}
       className="flex h-12 w-full items-center gap-2 rounded-2xl border border-line-strong bg-white px-3 text-left text-[15px] text-ink-muted transition active:scale-[0.99]"
     >
       <Plus size={20} className="shrink-0 text-accent" />
@@ -594,7 +594,7 @@ export default function CalendarPage() {
       </p>
       <button
         type="button"
-        onClick={() => (isMobile ? setSheet(defaultSheetDraft()) : composerRef.current?.focus())}
+        onClick={() => (isMobile ? setSheet({ ...defaultSheetDraft(), focusTitle: true }) : composerRef.current?.focus())}
         className="mt-3 rounded-xl bg-accent px-4 py-2 text-[12.5px] font-medium text-white transition active:scale-95"
       >
         Запланировать первое дело
@@ -1129,6 +1129,7 @@ export default function CalendarPage() {
       {editing && (
         <TaskEditModal
           occurrence={editing}
+          autoFocusTitle={!isMobile}
           onClose={() => setEditing(null)}
           onDelete={() => removeOccurrence(editing)}
           onSave={(patch) => updateTask(editing.id, patch)}

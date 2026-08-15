@@ -9,6 +9,12 @@ import { CATEGORY_COLORS, CATEGORY_LABELS } from "../../calendar/occurrences";
 export interface TaskSheetDraft {
   start: string;
   end: string;
+  /**
+   * Открыть клавиатуру сразу. Ставится, когда лист вызван кнопкой «Что
+   * запланировать?» — там печатать это следующее действие. После жеста по
+   * часам клавиатура только закрыла бы поля времени и длительности.
+   */
+  focusTitle?: boolean;
 }
 
 interface TaskSheetProps {
@@ -96,7 +102,7 @@ export default function TaskSheet({ date, draft, onSubmit, onClose }: TaskSheetP
         </div>
 
         <input
-          autoFocus
+          autoFocus={draft.focusTitle}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           onKeyDown={(event) => {
