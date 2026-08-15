@@ -21,6 +21,9 @@ export default function MainLayout() {
     if (!pane) return;
     pane.style.filter = "none";
     pane.style.willChange = "auto";
+    // Оставшийся transform делает то же самое, что filter: прерванный переход
+    // (быстрая навигация, свёрнутая вкладка) обрезал бы полноэкранный день.
+    pane.style.transform = "none";
   };
 
   // Backstop in case the enter animation never reports completion (interrupted

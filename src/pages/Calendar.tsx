@@ -9,11 +9,13 @@ import {
   Clock3,
   Edit3,
   List,
+  Maximize2,
   Plus,
   Rows3,
   Settings2,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import DayTimeline from "../components/DayTimeline";
 import TopBar from "../components/TopBar";
@@ -93,6 +95,7 @@ export default function CalendarPage() {
   const [editing, setEditing] = useState<TaskOccurrence | null>(null);
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dayFullscreen, setDayFullscreen] = useState(false);
   const [undo, setUndo] = useState<PendingUndo | null>(null);
   const [draftRequest, setDraftRequest] = useState<string | null>(null);
 
@@ -166,7 +169,14 @@ export default function CalendarPage() {
     );
   }, []);
 
-  const selectDay = (day: Date) => selectDate(localDate(day));
+  // Клик по числу в сетке — это запрос «покажи мне этот день», поэтому он
+  // сразу раскрывает часы на весь экран, а не просто меняет выделение.
+  const selectDay = (day: Date) => {
+    selectDate(localDate(day));
+    setDayFullscreen(true);
+  };
+
+  const shiftDay = (delta: number) => selectDate(shiftDate(selectedDate, delta));
 
   const move = useCallback(
     (delta: number) => {
@@ -292,6 +302,30 @@ export default function CalendarPage() {
     const end = timeToMinutes(endTime);
     return start === null || end === null || end <= start;
   })();
+
+  // ——— полноэкранный день ———
+
+  // Esc закрывает день, но только если сверху нет модалки задачи.
+  useEffect(() => {
+    if (!dayFullscreen || editing) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDayFullscreen(false);
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dayFullscreen, editing]);
+
+  useEffect(() => {
+    if (!dayFullscreen) return;
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [dayFullscreen]);
 
   // ——— горячие клавиши ———
 
@@ -647,16 +681,15 @@ export default function CalendarPage() {
         </p>
       </div>
 
-      {view !== "day" && (
-        <button
-          type="button"
-          onClick={() => setView("day")}
-          className="flex h-9 shrink-0 items-center gap-1 rounded-xl border border-line-strong bg-white px-3 text-[12px] font-medium text-ink-secondary transition hover:text-accent"
-        >
-          <Clock3 size={14} />
-          День
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setDayFullscreen(true)}
+        className="flex h-9 shrink-0 items-center gap-1 rounded-xl border border-line-strong bg-white px-3 text-[12px] font-medium text-ink-secondary transition hover:text-accent"
+        title="Открыть день на весь экран"
+      >
+        <Maximize2 size={14} />
+        На весь экран
+      </button>
     </div>
   );
 
@@ -943,6 +976,84 @@ export default function CalendarPage() {
             onToggleTask={toggleOccurrence}
             onDeleteTask={removeOccurrence}
           />
+        </div>
+      )}
+
+      {dayFullscreen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-surface-subtle">
+          <header className="safe-top flex shrink-0 items-center justify-between gap-3 border-b border-line-strong bg-white px-4 py-3 md:px-6 md:py-4">
+            <div className="flex min-w-0 items-center gap-2 md:gap-3">
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => shiftDay(-1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-white transition hover:bg-surface-subtle"
+                  aria-label="Предыдущий день"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shiftDay(1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-white transition hover:bg-surface-subtle"
+                  aria-label="Следующий день"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-ink-muted">
+                  {holiday ? (
+                    <span className="normal-case tracking-normal text-danger/80">{holiday.name}</span>
+                  ) : (
+                    "Выбранный день"
+                  )}
+                  {relative && (
+                    <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] normal-case tracking-normal text-accent">
+                      {relative}
+                    </span>
+                  )}
+                </p>
+                <h3
+                  className={`mt-0.5 truncate text-[18px] font-semibold capitalize md:text-[22px] ${
+                    isWeekend(toDate(selectedDate)) || holiday ? "text-danger/90" : "text-ink"
+                  }`}
+                >
+                  {selectedLabel}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2 md:gap-3">
+              <span className="hidden text-[12px] text-ink-muted lg:inline">
+                {selectedTasks.length > 0
+                  ? `${doneCount} из ${selectedTasks.length}${busy > 0 ? ` · ${formatDuration(busy)}` : ""}`
+                  : "пусто"}
+              </span>
+              {dayModeSwitch}
+              <button
+                type="button"
+                onClick={() => setDayFullscreen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-white text-ink-secondary transition hover:bg-surface-subtle"
+                aria-label="Закрыть день"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </header>
+
+          <div className="mx-auto flex min-h-0 w-full max-w-[1000px] flex-1 flex-col px-4 py-4 md:px-6 md:py-5">
+            <div className="shrink-0">{dayMarkersBlock}</div>
+            <div className="shrink-0">{taskComposer}</div>
+
+            <p className="mb-2 mt-4 shrink-0 text-[13px] font-medium text-ink">
+              Задачи дня
+              <span className="ml-2 text-[12px] text-ink-muted">{selectedTasks.length}</span>
+            </p>
+
+            {renderDayBody(true)}
+          </div>
         </div>
       )}
 
