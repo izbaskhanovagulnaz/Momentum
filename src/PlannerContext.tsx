@@ -11,6 +11,8 @@ import type {
   GoalCreateInput,
   GoalPhoto,
   GoalProgressEntry,
+  NoteColor,
+  NoteInput,
   NoteItem,
   PlannedExpense,
   SalesMonthPlan,
@@ -37,7 +39,10 @@ interface PlannerContextValue {
   toggleTask: (id: string) => void;
   deleteTask: (id: string) => void;
   updateTask: (id: string, input: Partial<Omit<Task, "id">>) => void;
-  addNote: (text: string) => void;
+  /** Строка — это быстрая заметка одним полем, объект — полная форма. */
+  addNote: (input: string | NoteInput) => void;
+  updateNote: (id: string, input: NoteInput) => void;
+  toggleNotePinned: (id: string) => void;
   deleteNote: (id: string) => void;
   addSalesMonth: (targetAmount: number, startDate: string, endDate: string) => void;
   selectSalesMonth: (monthId: string) => void;
@@ -122,8 +127,28 @@ const initialTasks: Task[] = [
 ];
 
 const initialNotes: NoteItem[] = [
-  { id: "1", text: "Клиент просил скидку на VIP тариф", timestamp: "сегодня, 09:14" },
-  { id: "2", text: "Уточнить сроки Didox интеграции", timestamp: "вчера, 18:40" },
+  {
+    id: "1",
+    title: "VIP тариф",
+    text: "Клиент просил скидку на VIP тариф",
+    tags: ["клиенты"],
+    color: "accent",
+    pinned: false,
+    timestamp: "",
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "2",
+    title: "",
+    text: "Уточнить сроки Didox интеграции",
+    tags: ["интеграции"],
+    color: "default",
+    pinned: false,
+    timestamp: "",
+    createdAt: "",
+    updatedAt: "",
+  },
 ];
 
 const initialSalesPlan: SalesPlan = {
@@ -319,6 +344,53 @@ function normalizeTasks(raw: unknown): Task[] {
     : [];
 }
 
+const NOTE_COLORS = new Set<NoteColor>(["default", "accent", "mint", "peach", "sky", "warning"]);
+
+export function noteStamp(date = new Date()) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+/** Теги без дублей, пустых значений и решёток. */
+export function normalizeNoteTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const tags = raw
+    .filter((tag): tag is string => typeof tag === "string")
+    .map((tag) => tag.trim().replace(/^#+/, "").slice(0, 24))
+    .filter(Boolean);
+  return [...new Map(tags.map((tag) => [tag.toLowerCase(), tag])).values()].slice(0, 8);
+}
+
+/**
+ * Заметки первой версии — это `{ id, text, timestamp }` без заголовка, тегов и
+ * дат. Поля дозаполняются здесь, чтобы страница не разбиралась с их отсутствием;
+ * `createdAt` у старых заметок остаётся пустым — восстанавливать его не из чего.
+ */
+function normalizeNote(raw: Partial<NoteItem> & Record<string, unknown>, fallbackIndex: number): NoteItem {
+  const createdAt = typeof raw.createdAt === "string" ? raw.createdAt : "";
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : `legacy-note-${fallbackIndex}`,
+    title: typeof raw.title === "string" ? raw.title : "",
+    text: typeof raw.text === "string" ? raw.text : "",
+    tags: normalizeNoteTags(raw.tags),
+    color: NOTE_COLORS.has(raw.color as NoteColor) ? (raw.color as NoteColor) : "default",
+    pinned: Boolean(raw.pinned),
+    timestamp: typeof raw.timestamp === "string" ? raw.timestamp : "",
+    createdAt,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : createdAt,
+  };
+}
+
+function normalizeNotes(raw: unknown): NoteItem[] {
+  return Array.isArray(raw)
+    ? raw.map((note, index) => normalizeNote(note as Partial<NoteItem> & Record<string, unknown>, index))
+    : [];
+}
+
 const PlannerContext = createContext<PlannerContextValue | null>(null);
 
 export function PlannerProvider({ children }: PropsWithChildren) {
@@ -496,7 +568,7 @@ export function PlannerProvider({ children }: PropsWithChildren) {
           const initial: PlannerDocument = legacyPlanner && typeof legacyPlanner === "object"
             ? {
                 tasks: normalizeTasks(legacyPlanner.tasks),
-                notes: Array.isArray(legacyPlanner.notes) ? legacyPlanner.notes : initialNotes,
+                notes: Array.isArray(legacyPlanner.notes) ? normalizeNotes(legacyPlanner.notes) : initialNotes,
                 salesPlan: legacyPlanner.salesPlan && typeof legacyPlanner.salesPlan === "object"
                   ? normalizeSalesPlan(legacyPlanner.salesPlan as Partial<SalesPlan> & Record<string, unknown>)
                   : initialSalesPlan,
@@ -538,13 +610,14 @@ export function PlannerProvider({ children }: PropsWithChildren) {
                 localDate(),
               ))
             : initialGoals;
-          applyNotes(Array.isArray(remote.notes) ? remote.notes : []);
+          const normalizedNotes = normalizeNotes(remote.notes);
+          applyNotes(normalizedNotes);
           applySalesPlan(normalizedSalesPlan);
           applyFinance(normalizedFinance);
           applyGoals(normalizedGoals);
 
           const normalizedDocument = {
-            notes: Array.isArray(remote.notes) ? remote.notes : [],
+            notes: normalizedNotes,
             salesPlan: normalizedSalesPlan,
             finance: normalizedFinance,
             goals: normalizedGoals,
@@ -635,19 +708,58 @@ export function PlannerProvider({ children }: PropsWithChildren) {
       if (changed) void persistTask(changed, id);
     },
 
-    addNote: (text) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
+    addNote: (input) => {
+      const draft: NoteInput = typeof input === "string" ? { text: input } : input;
+      const text = draft.text.trim();
+      const title = (draft.title || "").trim();
+      if (!text && !title) return;
 
-      const nextNotes = [{
+      const now = new Date();
+      const stamp = now.toISOString();
+      const note: NoteItem = {
         id: crypto.randomUUID(),
-        text: trimmed,
-        timestamp: new Intl.DateTimeFormat("ru-RU", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date()),
-      }, ...notesRef.current];
+        title,
+        text,
+        tags: normalizeNoteTags(draft.tags),
+        color: NOTE_COLORS.has(draft.color as NoteColor) ? (draft.color as NoteColor) : "default",
+        pinned: Boolean(draft.pinned),
+        timestamp: noteStamp(now),
+        createdAt: stamp,
+        updatedAt: stamp,
+      };
 
+      const nextNotes = [note, ...notesRef.current];
+      applyNotes(nextNotes);
+      void persistField("notes", nextNotes);
+    },
+
+    updateNote: (id, input) => {
+      const text = input.text.trim();
+      const title = (input.title || "").trim();
+      if (!text && !title) return;
+
+      const nextNotes = notesRef.current.map((note) =>
+        note.id === id
+          ? {
+              ...note,
+              title,
+              text,
+              tags: normalizeNoteTags(input.tags),
+              color: NOTE_COLORS.has(input.color as NoteColor) ? (input.color as NoteColor) : "default",
+              pinned: input.pinned === undefined ? Boolean(note.pinned) : input.pinned,
+              updatedAt: new Date().toISOString(),
+            }
+          : note,
+      );
+
+      applyNotes(nextNotes);
+      void persistField("notes", nextNotes);
+    },
+
+    toggleNotePinned: (id) => {
+      const nextNotes = notesRef.current.map((note) =>
+        note.id === id ? { ...note, pinned: !note.pinned } : note,
+      );
       applyNotes(nextNotes);
       void persistField("notes", nextNotes);
     },

@@ -95,10 +95,30 @@ export interface GoalCreateInput {
   imageDataUrl: string;
 }
 
+export type NoteColor = "default" | "accent" | "mint" | "peach" | "sky" | "warning";
+
 export interface NoteItem {
   id: string;
+  /** Тело заметки. */
   text: string;
+  /** Время создания «как показать». Осталось от первой версии заметок. */
   timestamp: string;
+  title?: string;
+  tags?: string[];
+  color?: NoteColor;
+  pinned?: boolean;
+  /** ISO создания и изменения. У заметок из первой версии их нет. */
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** То, что редактирует пользователь: id и даты проставляет контекст. */
+export interface NoteInput {
+  title?: string;
+  text: string;
+  tags?: string[];
+  color?: NoteColor;
+  pinned?: boolean;
 }
 
 export interface CalendarEvent {
