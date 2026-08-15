@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Repeat2, Trash2, X } from "lucide-react";
 import type { Task, TaskCategory, TaskOccurrence, TaskRepeat } from "../../types";
 import { timeToMinutes } from "../../utils";
+import { shiftedEnd } from "../../calendar/dates";
 import {
   CATEGORY_COLORS,
   CATEGORY_LABELS,
@@ -120,7 +121,11 @@ export default function TaskEditModal({ occurrence, onSave, onDelete, onClose }:
               <input
                 type="time"
                 value={time}
-                onChange={(event) => setTime(event.target.value)}
+                onChange={(event) => {
+                  // Конец задан — значит это интервал, и он переезжает целиком.
+                  if (endTime) setEndTime(shiftedEnd(event.target.value, time, endTime));
+                  setTime(event.target.value);
+                }}
                 className="mt-1 h-11 w-full rounded-2xl border border-line-strong px-3 outline-none"
               />
             </label>

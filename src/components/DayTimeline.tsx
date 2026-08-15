@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Edit3, Repeat2, Trash2, X } from "lucide-react";
 import type { TaskOccurrence } from "../types";
 import { formatTimeRange, localDate, timeToMinutes } from "../utils";
-import { minutesToClock } from "../calendar/dates";
+import { minutesToClock, shiftedEnd } from "../calendar/dates";
 import { blockGeometry, DAY_MINUTES, placeTasks, taskTone } from "../calendar/layout";
 
 const ROW_HEIGHT = 56;
@@ -473,12 +473,9 @@ export default function DayTimeline({
                   type="time"
                   value={draftTime}
                   onChange={(event) => {
+                    // Черновик всегда интервал, поэтому конец едет за началом.
+                    setDraftEnd(shiftedEnd(event.target.value, draftTime, draftEnd));
                     setDraftTime(event.target.value);
-                    const start = timeToMinutes(event.target.value);
-                    const end = timeToMinutes(draftEnd);
-                    if (start !== null && (end === null || end <= start)) {
-                      setDraftEnd(minutesToClock(Math.min(start + 60, DAY_MINUTES - 1)));
-                    }
                   }}
                   className="h-7 w-[86px] shrink-0 rounded-lg border border-line-strong bg-surface-subtle px-1 text-[11px] outline-none"
                   aria-label="Начало задачи"

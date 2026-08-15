@@ -39,6 +39,7 @@ import {
   monthName,
   relativeDayLabel,
   shiftDate,
+  shiftedEnd,
   toDate,
   weekDays,
 } from "../calendar/dates";
@@ -489,7 +490,11 @@ export default function CalendarPage() {
         <input
           type="time"
           value={time}
-          onChange={(event) => setTime(event.target.value)}
+          onChange={(event) => {
+            // Конец задан — значит это интервал, и он переезжает целиком.
+            if (endTime) setEndTime(shiftedEnd(event.target.value, time, endTime));
+            setTime(event.target.value);
+          }}
           className="h-9 min-w-[92px] flex-1 rounded-xl border border-line-strong bg-surface-subtle px-3 text-[12px] outline-none"
           aria-label="Начало задачи"
         />

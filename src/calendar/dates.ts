@@ -1,4 +1,4 @@
-import { localDate } from "../utils";
+import { localDate, timeToMinutes } from "../utils";
 
 export const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] as const;
 
@@ -106,6 +106,27 @@ export function minutesToClock(minutes: number) {
   const clamped = Math.max(0, Math.min(24 * 60, Math.round(minutes)));
   const hours = Math.floor(clamped / 60);
   return `${String(hours).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Новый конец интервала после смены начала: длительность сохраняется, то есть
+ * задача переезжает целиком. Без этого сдвиг начала назад просто растягивал бы
+ * задачу до старого конца.
+ */
+export function shiftedEnd(
+  nextStart: string,
+  previousStart: string,
+  previousEnd: string,
+  fallbackMinutes = 60,
+) {
+  const start = timeToMinutes(nextStart);
+  if (start === null) return previousEnd;
+
+  const from = timeToMinutes(previousStart);
+  const to = timeToMinutes(previousEnd);
+  const duration = from !== null && to !== null && to > from ? to - from : fallbackMinutes;
+
+  return minutesToClock(Math.min(start + duration, 24 * 60 - 1));
 }
 
 /** «2 ч 40 мин» / «40 мин» / «2 ч». */
