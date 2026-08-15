@@ -30,9 +30,19 @@ export interface DayTimelineProps {
   /** Открыть черновик на этом времени (переход из другого режима). */
   draftRequest?: string | null;
   onDraftHandled?: () => void;
+  /**
+   * Вместо встроенного редактора отдавать выбранный интервал наружу — на
+   * телефоне он не помещается в ширину часов и живёт в отдельном листе.
+   */
+  useSheet?: boolean;
+  onRequestCreate?: (start: string, end: string) => void;
   /** Растянуть сетку часов на всю высоту родителя вместо фиксированной. */
   fill?: boolean;
 }
+
+/** Сколько держать палец, прежде чем жест перестанет быть прокруткой. */
+const LONG_PRESS_MS = 260;
+const SCROLL_SLOP = 8;
 
 export default function DayTimeline({
   date,
@@ -48,6 +58,8 @@ export default function DayTimeline({
   onReschedule,
   draftRequest,
   onDraftHandled,
+  useSheet = false,
+  onRequestCreate,
   fill = false,
 }: DayTimelineProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +70,15 @@ export default function DayTimeline({
   const [draftTitle, setDraftTitle] = useState("");
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const interactionRef = useRef<Interaction | null>(null);
+  // Отложенный тач-жест: пока таймер не сработал, палец всё ещё листает.
+  const pendingRef = useRef<{
+    y: number;
+    anchor: number;
+    timer: number;
+    /** Ключ задачи, если палец лёг на блок, а не на пустой слот. */
+    task?: string;
+  } | null>(null);
+  const touchDragRef = useRef(false);
   const [nowMinutes, setNowMinutes] = useState(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
@@ -141,9 +162,7 @@ export default function DayTimeline({
     if (!draftRequest) return;
     const start = timeToMinutes(draftRequest);
     if (start === null) return;
-    setDraftTime(draftRequest);
-    setDraftEnd(minutesToClock(Math.min(start + 60, DAY_MINUTES - 1)));
-    setDraftTitle("");
+    openDraft(start, Math.min(start + 60, DAY_MINUTES - 1));
     const container = scrollRef.current;
     if (container) container.scrollTop = Math.max(0, yOf(start) - ROW_HEIGHT);
     onDraftHandled?.();
@@ -154,6 +173,10 @@ export default function DayTimeline({
   // жеста, очень быстрый клик успевает отпустить кнопку до подписки.
   useEffect(() => {
     const move = (event: PointerEvent) => {
+      // Палец сдвинулся раньше срабатывания таймера — значит это прокрутка.
+      const pending = pendingRef.current;
+      if (pending && Math.abs(event.clientY - pending.y) > SCROLL_SLOP) cancelPending();
+
       const current = interactionRef.current;
       if (!current) return;
       const pointer = minutesAt(event.clientY);
@@ -184,16 +207,29 @@ export default function DayTimeline({
     };
 
     const finish = () => {
+      // Короткий тап: таймер удержания ещё не сработал.
+      const pending = pendingRef.current;
+      if (pending) {
+        const { anchor, task: key } = pending;
+        cancelPending();
+        if (key) {
+          const task = tasks.find((item) => item.key === key);
+          if (task) onEdit(task);
+        } else {
+          openDraft(anchor, Math.min(DAY_MINUTES - 1, anchor + Math.max(step, 60)));
+        }
+        return;
+      }
+
       const current = interactionRef.current;
       if (!current) return;
       setDrag(null);
+      touchDragRef.current = false;
 
       if (current.kind === "create") {
         const start = current.moved ? current.start : snap(current.anchor);
         const end = current.moved ? current.end : Math.min(DAY_MINUTES - 1, start + Math.max(step, 60));
-        setDraftTime(minutesToClock(start));
-        setDraftEnd(minutesToClock(end));
-        setDraftTitle("");
+        openDraft(start, end);
         return;
       }
 
@@ -203,22 +239,78 @@ export default function DayTimeline({
       else if (current.kind === "move") onEdit(task);
     };
 
+    // Отмена жеста (браузер забрал его под свой скролл) ничего не создаёт.
+    const abort = () => {
+      cancelPending();
+      if (interactionRef.current) setDrag(null);
+      touchDragRef.current = false;
+    };
+
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
+    window.addEventListener("pointercancel", abort);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("pointercancel", abort);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, step, windowStart, windowEnd]);
+  }, [tasks, step, windowStart, windowEnd, useSheet]);
+
+  // Пока идёт тач-жест, страница не должна прокручиваться под пальцем.
+  // Слушатель обязан быть непассивным, иначе preventDefault игнорируется.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (touchDragRef.current) event.preventDefault();
+    };
+
+    grid.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => grid.removeEventListener("touchmove", onTouchMove);
+  }, []);
+
+  const cancelPending = () => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    pendingRef.current = null;
+  };
 
   const startCreate = (event: React.PointerEvent) => {
     if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest("[data-block]")) return;
+
     const anchor = snap(minutesAt(event.clientY));
-    setDrag({ kind: "create", anchor, start: anchor, end: anchor + step, moved: false });
+
+    if (event.pointerType === "mouse") {
+      setDrag({ kind: "create", anchor, start: anchor, end: anchor + step, moved: false });
+      return;
+    }
+
+    // Палец: сначала ждём удержание, иначе жест уйдёт в прокрутку часов.
+    pendingRef.current = {
+      y: event.clientY,
+      anchor,
+      timer: window.setTimeout(() => {
+        pendingRef.current = null;
+        touchDragRef.current = true;
+        navigator.vibrate?.(12);
+        setDrag({ kind: "create", anchor, start: anchor, end: anchor + step, moved: false });
+      }, LONG_PRESS_MS),
+    };
+  };
+
+  /** Встроенный редактор на мыши, отдельный лист — на телефоне. */
+  const openDraft = (start: number, end: number) => {
+    if (useSheet) {
+      onRequestCreate?.(minutesToClock(start), minutesToClock(end));
+      return;
+    }
+    setDraftTime(minutesToClock(start));
+    setDraftEnd(minutesToClock(end));
+    setDraftTitle("");
   };
 
   const submitDraft = () => {
@@ -383,7 +475,27 @@ export default function DayTimeline({
                       if ((event.target as HTMLElement).closest("button")) return;
                       event.stopPropagation();
                       const grab = minutesAt(event.clientY) - start;
-                      setDrag({ kind: "move", key: task.key, start, end, grab, moved: false });
+                      const drag = () =>
+                        setDrag({ kind: "move", key: task.key, start, end, grab, moved: false });
+
+                      if (event.pointerType === "mouse") {
+                        drag();
+                        return;
+                      }
+
+                      // На пальце задача берётся удержанием: короткий тап
+                      // должен открывать её, а не таскать.
+                      pendingRef.current = {
+                        y: event.clientY,
+                        anchor: start,
+                        task: task.key,
+                        timer: window.setTimeout(() => {
+                          pendingRef.current = null;
+                          touchDragRef.current = true;
+                          navigator.vibrate?.(12);
+                          drag();
+                        }, LONG_PRESS_MS),
+                      };
                     }}
                     className={`group relative flex h-full cursor-grab items-center gap-2 overflow-hidden rounded-xl border-l-[3px] px-2 shadow-sm active:cursor-grabbing ${taskTone(task)}`}
                   >

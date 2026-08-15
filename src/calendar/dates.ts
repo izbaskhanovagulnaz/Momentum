@@ -78,8 +78,20 @@ const shortDayFormat = new Intl.DateTimeFormat("ru-RU", {
 });
 const weekdayShortFormat = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
 
+const dayMonthFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
+const weekdayLongFormat = new Intl.DateTimeFormat("ru-RU", { weekday: "long" });
+
 export function monthName(date: Date) {
   return monthYearFormat.format(date);
+}
+
+/** «26 августа» — без дня недели, чтобы влезало в узкую шапку. */
+export function dayMonthLabel(value: string) {
+  return dayMonthFormat.format(toDate(value));
+}
+
+export function weekdayLongLabel(value: string) {
+  return weekdayLongFormat.format(toDate(value));
 }
 
 export function longDayLabel(value: string) {

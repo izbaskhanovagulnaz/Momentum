@@ -32,9 +32,11 @@ import type { Task, TaskCategory, TaskOccurrence } from "../types";
 import { formatTimeRange, localDate, timeToMinutes } from "../utils";
 import {
   buildMonth,
+  dayMonthLabel,
   formatDuration,
   isWeekend,
   isoWeek,
+  minutesToClock,
   monthKey,
   monthName,
   relativeDayLabel,
@@ -42,6 +44,7 @@ import {
   shiftedEnd,
   toDate,
   weekDays,
+  weekdayLongLabel,
 } from "../calendar/dates";
 import { holidayFor } from "../calendar/holidays";
 import { buildMarkers, formatMarkerAmount, MARKER_STYLES } from "../calendar/markers";
@@ -56,6 +59,9 @@ import {
   toggleOccurrencePatch,
 } from "../calendar/occurrences";
 import { useCalendarSettings } from "../calendar/useCalendarSettings";
+import { useIsMobile } from "../calendar/useMediaQuery";
+import TaskSheet from "../components/calendar/TaskSheet";
+import type { TaskSheetDraft } from "../components/calendar/TaskSheet";
 
 type ViewMode = "month" | "week" | "day" | "agenda";
 
@@ -83,6 +89,7 @@ function tap() {
 export default function CalendarPage() {
   const { tasks, goals, finance, addTask, updateTask, deleteTask } = usePlanner();
   const { settings, update: updateSettings } = useCalendarSettings();
+  const isMobile = useIsMobile();
 
   const today = localDate();
   const [view, setView] = useState<ViewMode>(() => {
@@ -97,6 +104,7 @@ export default function CalendarPage() {
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dayFullscreen, setDayFullscreen] = useState(false);
+  const [sheet, setSheet] = useState<TaskSheetDraft | null>(null);
   const [undo, setUndo] = useState<PendingUndo | null>(null);
   const [draftRequest, setDraftRequest] = useState<string | null>(null);
 
@@ -298,6 +306,19 @@ export default function CalendarPage() {
     setEndTime("");
   };
 
+  /** Ближайшие полчаса для сегодняшнего дня, начало рабочего — для прочих. */
+  const defaultSheetDraft = (): TaskSheetDraft => {
+    const now = new Date();
+    const base =
+      selectedDate === today
+        ? Math.min(23 * 60, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30)
+        : settings.dayStart * 60;
+    return {
+      start: minutesToClock(base),
+      end: minutesToClock(Math.min(base + 60, 24 * 60 - 1)),
+    };
+  };
+
   const endInvalid = Boolean(endTime) && (() => {
     const start = timeToMinutes(time);
     const end = timeToMinutes(endTime);
@@ -444,28 +465,45 @@ export default function CalendarPage() {
         type="button"
         onClick={() => setDayView("timeline")}
         aria-pressed={dayView === "timeline"}
+        aria-label="Показать часы"
         className={`flex h-7 items-center gap-1 rounded-lg px-2 text-[12px] font-medium transition ${
           dayView === "timeline" ? "bg-accent text-white" : "text-ink-muted"
         }`}
+        title="Часы"
       >
         <Clock3 size={14} />
-        Часы
+        <span className="hidden sm:inline">Часы</span>
       </button>
       <button
         type="button"
         onClick={() => setDayView("list")}
         aria-pressed={dayView === "list"}
+        aria-label="Показать списком"
         className={`flex h-7 items-center gap-1 rounded-lg px-2 text-[12px] font-medium transition ${
           dayView === "list" ? "bg-accent text-white" : "text-ink-muted"
         }`}
+        title="Список"
       >
         <List size={14} />
-        Список
+        <span className="hidden sm:inline">Список</span>
       </button>
     </div>
   );
 
-  const taskComposer = (
+  // На телефоне поля времени и категории не помещаются в строку, поэтому
+  // композер сворачивается в одну кнопку, открывающую лист.
+  const mobileComposer = (
+    <button
+      type="button"
+      onClick={() => setSheet(defaultSheetDraft())}
+      className="flex h-12 w-full items-center gap-2 rounded-2xl border border-line-strong bg-white px-3 text-left text-[15px] text-ink-muted transition active:scale-[0.99]"
+    >
+      <Plus size={20} className="shrink-0 text-accent" />
+      Что запланировать?
+    </button>
+  );
+
+  const fullComposer = (
     <div className="rounded-2xl border border-line-strong bg-white p-3">
       <div className="flex items-center gap-2">
         <Plus size={18} className="shrink-0 text-accent" />
@@ -539,6 +577,8 @@ export default function CalendarPage() {
     </div>
   );
 
+  const taskComposer = isMobile ? mobileComposer : fullComposer;
+
   const emptyDay = (
     <div className="rounded-2xl border border-dashed border-line-strong bg-white px-4 py-8 text-center">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
@@ -548,11 +588,13 @@ export default function CalendarPage() {
         {selectedDate === today ? "День пока пустой" : "На этот день задач нет"}
       </p>
       <p className="mt-1 text-[12px] text-ink-muted">
-        Кликните по свободному часу или добавьте задачу вручную
+        {isMobile
+          ? "Коснитесь свободного часа или задержите палец, чтобы выбрать интервал"
+          : "Кликните по свободному часу или потяните по сетке, чтобы выбрать интервал"}
       </p>
       <button
         type="button"
-        onClick={() => composerRef.current?.focus()}
+        onClick={() => (isMobile ? setSheet(defaultSheetDraft()) : composerRef.current?.focus())}
         className="mt-3 rounded-xl bg-accent px-4 py-2 text-[12.5px] font-medium text-white transition active:scale-95"
       >
         Запланировать первое дело
@@ -639,6 +681,8 @@ export default function CalendarPage() {
         collapseNight={settings.collapseNight}
         draftRequest={draftRequest}
         onDraftHandled={() => setDraftRequest(null)}
+        useSheet={isMobile}
+        onRequestCreate={(start, end) => setSheet({ start, end })}
         onCreate={(value, slotTime, slotEnd) =>
           addTask({
             title: value,
@@ -1008,24 +1052,26 @@ export default function CalendarPage() {
               </div>
 
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-ink-muted">
-                  {holiday ? (
-                    <span className="normal-case tracking-normal text-danger/80">{holiday.name}</span>
-                  ) : (
-                    "Выбранный день"
-                  )}
+                <p className="flex items-center gap-2 text-[11px] text-ink-muted">
+                  <span className="truncate capitalize">
+                    {holiday ? (
+                      <span className="text-danger/80">{holiday.name}</span>
+                    ) : (
+                      weekdayLongLabel(selectedDate)
+                    )}
+                  </span>
                   {relative && (
-                    <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] normal-case tracking-normal text-accent">
+                    <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent">
                       {relative}
                     </span>
                   )}
                 </p>
                 <h3
-                  className={`mt-0.5 truncate text-[18px] font-semibold capitalize md:text-[22px] ${
+                  className={`mt-0.5 truncate text-[18px] font-semibold md:text-[22px] ${
                     isWeekend(toDate(selectedDate)) || holiday ? "text-danger/90" : "text-ink"
                   }`}
                 >
-                  {selectedLabel}
+                  {dayMonthLabel(selectedDate)}
                 </h3>
               </div>
             </div>
@@ -1060,6 +1106,24 @@ export default function CalendarPage() {
             {renderDayBody(true)}
           </div>
         </div>
+      )}
+
+      {sheet && (
+        <TaskSheet
+          date={selectedDate}
+          draft={sheet}
+          onClose={() => setSheet(null)}
+          onSubmit={(input) =>
+            addTask({
+              title: input.title,
+              date: selectedDate,
+              time: input.time,
+              endTime: input.endTime,
+              priority: "normal",
+              category: input.category,
+            })
+          }
+        />
       )}
 
       {editing && (
